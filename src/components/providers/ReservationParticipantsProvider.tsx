@@ -135,9 +135,9 @@ export const ReservationParticipantsProvider = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-0 py-0 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
         >
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="mx-auto flex min-h-[100vh] w-full max-w-lg flex-col bg-white p-4 shadow-2xl sm:min-h-0 sm:rounded-2xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-zinc-900">表示名の設定</h2>

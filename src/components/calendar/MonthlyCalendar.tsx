@@ -628,14 +628,14 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-0 py-0 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
           onClick={(event) => {
             if (event.target === event.currentTarget) {
               closeDetailDialog();
             }
           }}
         >
-          <div className="relative flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="relative mx-auto flex min-h-[100vh] w-full max-w-xl flex-col overflow-hidden bg-white shadow-2xl sm:min-h-0 sm:rounded-2xl sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-5">
               <div className="flex flex-wrap items-baseline gap-3">
                 <h2 className="text-lg font-semibold text-zinc-900">

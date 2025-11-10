@@ -23,13 +23,13 @@ const buildAnalysisPrompt = (participants: string[]): string => {
 2. 施設名 (体育館名のみで良い。「体育室, 競技室」などは不要。)
 3. 各時間枠（morning / afternoon / night）の予約者名リスト
    - 時間枠は必ず "morning" (午前), "afternoon" (午後), "night" (夜) の3種類のキーを用いる
-   - 画像に該当枠の情報が無い場合は空配列 []
+   - 画像に該当枠の情報が無い場合はslotsの中のkeyごと必要ありません。
    - 各枠には同じ予約者名を使用する
 
 出力は必ず下記の JSON 形式（余計な空白や説明文を含めない）で返してください。
   - 複数のデータがある場合は日付の若い順でソートしてください。
   - 予約者名は ${participantName} であることを確認してください。
-  - 必ずslotsの子のvalueの中に ${participantName} が含まれていることを確認してください。
+  - 必ずslotsの子のvalueの中に ${participantName} が1つだけ含まれていることを確認してください。
 {
   "date": "YYYY-MM-DD",
   "gymName": "施設名（不明なら \"\" または null）",

@@ -490,9 +490,9 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 py-6"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/30 px-0 py-0 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
         >
-          <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+          <div className="relative mx-auto flex min-h-[100vh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-xl sm:min-h-0 sm:rounded-2xl sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-5">
               <div>
                 <h2 className="text-xl font-semibold text-zinc-900">解析結果の確認</h2>
