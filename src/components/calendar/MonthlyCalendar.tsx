@@ -586,16 +586,18 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                               ? facilityNames.join('／')
                               : '施設名未設定';
 
+                          const facilityLabel = facilityNames.join('／') || '施設名未設定';
+
                           return (
                             <li
                               key={`${day.key}-${detail.slotId}`}
-                              className="flex items-start gap-1"
+                              className="text-zinc-600"
                             >
-                              <span className="flex-shrink-0 rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
+                              <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
                                 {SLOT_LABELS[detail.slotId]}
                               </span>
-                              <span className="grow break-words text-zinc-600">
-                                {slotSummary}
+                              <span className="mt-1 block truncate text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:max-w-full sm:truncate sm:pl-1.5">
+                                {facilityLabel}
                               </span>
                             </li>
                           );

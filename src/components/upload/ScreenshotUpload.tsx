@@ -363,6 +363,13 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
     [participants],
   );
 
+  const removeReservation = useCallback((reservationId: string) => {
+    setReviewState((prev) => ({
+      ...prev,
+      reservations: prev.reservations.filter((reservation) => reservation.id !== reservationId),
+    }));
+  }, []);
+
   const handleConfirm = useCallback(async () => {
     if (status === 'saving') {
       return;
@@ -525,7 +532,21 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
                       key={reservation.id}
                       className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-4 shadow-sm"
                     >
-                      <div className="space-y-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-sm font-semibold text-zinc-700">
+                          予約候補
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeReservation(reservation.id)}
+                          className="inline-flex items-center gap-1 rounded-full border border-zinc-300 px-2 py-1 text-xs text-zinc-500 transition hover:border-zinc-400 hover:text-zinc-700"
+                        >
+                          <span aria-hidden="true">✕</span>
+                          <span>削除</span>
+                        </button>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
                         {reservation.entries.map((entry, entryIndex) => (
                           <div
                             key={entry.id}
