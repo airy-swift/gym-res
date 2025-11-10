@@ -26,12 +26,15 @@ const buildAnalysisPrompt = (participants: string[]): string => {
    - 画像に該当枠の情報が無い場合は空配列 []
    - 各枠には同じ予約者名を使用する
 
-出力は必ず下記の JSON 形式（余計な空白や説明文を含めない）で返してください。また、複数のデータがある場合は日付の若い順でソートしてください。
+出力は必ず下記の JSON 形式（余計な空白や説明文を含めない）で返してください。
+  - 複数のデータがある場合は日付の若い順でソートしてください。
+  - 予約者名は ${participantName} であることを確認してください。
+  - 必ずslotsの子のvalueの中に ${participantName} が含まれていることを確認してください。
 {
   "date": "YYYY-MM-DD",
   "gymName": "施設名（不明なら \"\" または null）",
   "slots": {
-    "morning": ["${participantName}"],
+    "morning": [],
     "afternoon": [],
     "night": []
   }

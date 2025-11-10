@@ -189,14 +189,16 @@ const buildCalendarGrid = (monthAnchor: SimpleDate, today: SimpleDate) => {
 
 type ReservationMap = Record<string, ReservationDayRecord[]>;
 
-const buildReservationMap = (reservations: ReservationDayRecord[]): ReservationMap =>
-  reservations.reduce<ReservationMap>((acc, reservation) => {
-    if (!acc[reservation.date]) {
-      acc[reservation.date] = [];
+const buildReservationMap = (reservations: ReservationDayRecord[]): ReservationMap => {
+  const map: ReservationMap = {};
+  reservations.forEach((reservation) => {
+    if (!map[reservation.date]) {
+      map[reservation.date] = [];
     }
-    acc[reservation.date]?.push(reservation);
-    return acc;
-  }, {});
+    map[reservation.date]!.push(reservation);
+  });
+  return map;
+};
 
 export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarProps) => {
   const today = useMemo(() => getTodayInJst(), []);
