@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { MonthlyCalendar } from '@/components/calendar/MonthlyCalendar';
 import { ScreenshotUpload } from '@/components/upload/ScreenshotUpload';
@@ -49,26 +49,31 @@ const EditParticipantsButton = () => {
   );
 };
 
-const AppContent = () => (
-  <div className="min-h-screen bg-zinc-50 py-8 sm:py-12">
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 sm:px-6 lg:px-8">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">
-            体育館予約共有カレンダー
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-600 sm:text-base">
-            体育館の抽選応募状況をチームで共有します。デフォルトで次月を表示し、日本時間（JST）で日程を管理します。
-          </p>
-        </div>
-        <EditParticipantsButton />
-      </header>
+const AppContent = () => {
+  const [openScreenshotUpload, setOpenScreenshotUpload] = useState<(() => void) | null>(null);
 
-      <ScreenshotUpload />
-      <MonthlyCalendar />
+  const handleRegisterOpenDialog = useCallback((handler: (() => void) | null) => {
+    setOpenScreenshotUpload(() => handler ?? null);
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-zinc-50 py-8 sm:py-12">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 sm:px-6 lg:px-8">
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">
+              体育館予約共有カレンダー
+            </h1>
+          </div>
+          <EditParticipantsButton />
+        </header>
+
+        <ScreenshotUpload onRegisterOpenDialog={handleRegisterOpenDialog} />
+        <MonthlyCalendar onRequestScreenshotUpload={openScreenshotUpload ?? undefined} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const AppShell = () => (
   <ReservationParticipantsProvider>

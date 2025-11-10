@@ -1,19 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
 import { useReservationParticipants } from '@/components/providers/ReservationParticipantsProvider';
-import { type ReservationSlotId } from '@/lib/firebase';
+import {
+  createReservationDay,
+  type ReservationSlotId,
+  type ReservationSlots,
+} from '@/lib/firebase';
 import {
   analyzeReservationImage,
   type GeminiReservationAnalysisResult,
 } from '@/lib/gemini/client';
 
-type AnalysisStatus = 'idle' | 'uploading' | 'analyzing';
+type AnalysisStatus = 'idle' | 'uploading' | 'analyzing' | 'saving';
 
 type ReviewReservationEntry = {
   id: string;
   slot: ReservationSlotId;
+  names: string[];
 };
 
 type ReviewReservation = {
@@ -82,6 +93,7 @@ const convertAnalysesToReview = (
         entries.push({
           id: createReservationEntryId(),
           slot,
+          names: analysis.slots[slot] ?? [],
         });
       }
     });
@@ -90,6 +102,7 @@ const convertAnalysesToReview = (
       entries.push({
         id: createReservationEntryId(),
         slot: 'morning',
+        names: [],
       });
     }
 
@@ -123,8 +136,12 @@ const validateImageFile = (file: File | undefined): File => {
   return file;
 };
 
-export const ScreenshotUpload = () => {
-  const { participants, isReady: areParticipantsReady, openEditor } =
+type ScreenshotUploadProps = {
+  onRegisterOpenDialog?: (open: (() => void) | null) => void;
+};
+
+export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps) => {
+  const { participants, participantName, isReady: areParticipantsReady, openEditor } =
     useReservationParticipants();
   const [isDragging, setIsDragging] = useState(false);
   const [dragDepth, setDragDepth] = useState(0);
@@ -132,6 +149,8 @@ export const ScreenshotUpload = () => {
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reviewState, setReviewState] = useState<ReviewState>(() => initialReviewState());
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const resetState = useCallback(() => {
     setReviewState(initialReviewState());
@@ -210,6 +229,43 @@ export const ScreenshotUpload = () => {
     }
   }, [areParticipantsReady, participants]);
 
+  const openFilePicker = useCallback(() => {
+    if (!areParticipantsReady) {
+      setError('予約者名を設定してから画像をアップロードしてください。');
+      openEditor();
+      return;
+    }
+    fileInputRef.current?.click();
+  }, [areParticipantsReady, openEditor]);
+
+  const handleFileInputChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file) {
+        return;
+      }
+      try {
+        const validated = validateImageFile(file);
+        await processFile(validated);
+      } catch (err) {
+        setError((err as Error).message);
+        setStatus('idle');
+      }
+    },
+    [processFile],
+  );
+
+  useEffect(() => {
+    if (!onRegisterOpenDialog) {
+      return;
+    }
+    onRegisterOpenDialog(openFilePicker);
+    return () => {
+      onRegisterOpenDialog(null);
+    };
+  }, [onRegisterOpenDialog, openFilePicker]);
+
   const handleDrop = useCallback(
     async (event: DragEvent) => {
       event.preventDefault();
@@ -280,11 +336,76 @@ export const ScreenshotUpload = () => {
     [updateReservation],
   );
 
-  const handleConfirm = () => {
-    console.info('予約内容確認', reviewState);
-    setIsDialogOpen(false);
-    setReviewState(initialReviewState());
-  };
+  const buildReservationSlots = useCallback(
+    (reservation: ReviewReservation): ReservationSlots => {
+      const base: ReservationSlots = {
+        morning: [],
+        afternoon: [],
+        night: [],
+      };
+
+      reservation.entries.forEach((entry) => {
+        const hasAiNames = entry.names.length > 0;
+        const targetNames = hasAiNames ? entry.names : participants;
+        const sanitizedNames = targetNames
+          .map((rawName) => rawName.trim())
+          .filter((name) => name.length > 0);
+
+        base[entry.slot] = sanitizedNames.map((name) => ({
+          name,
+          source: hasAiNames ? 'ai' : 'manual',
+          strike: false,
+        }));
+      });
+
+      return base;
+    },
+    [participants],
+  );
+
+  const handleConfirm = useCallback(async () => {
+    if (status === 'saving') {
+      return;
+    }
+
+    setStatus('saving');
+
+    try {
+      await Promise.all(
+        reviewState.reservations.map(async (reservation) => {
+          const trimmedDate = reservation.date.trim();
+          if (trimmedDate.length === 0) {
+            throw new Error('予約日が未入力の項目があります。');
+          }
+
+          const trimmedGymName = reservation.gymName.trim();
+          const slots = buildReservationSlots(reservation);
+
+          await createReservationDay({
+            date: trimmedDate,
+            gymName: trimmedGymName,
+            slots,
+            confirmed: true,
+            lastUpdatedBy:
+              participantName && participantName.trim().length > 0
+                ? participantName.trim()
+                : null,
+            updatedAt: new Date().toISOString(),
+          });
+        }),
+      );
+
+      resetState();
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? `予約データの保存に失敗しました: ${err.message}`
+          : '予約データの保存に失敗しました。',
+      );
+      setStatus('idle');
+    }
+  }, [buildReservationSlots, participantName, resetState, reviewState, status]);
 
   const isConfirmEnabled = useMemo(() => {
     if (!reviewState.confirmed || reviewState.reservations.length === 0) {
@@ -306,6 +427,13 @@ export const ScreenshotUpload = () => {
 
   return (
     <>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
       {!areParticipantsReady ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:text-base">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -340,7 +468,11 @@ export const ScreenshotUpload = () => {
             </div>
             <div className="space-y-1">
               <p className="text-base font-semibold">
-                {status === 'uploading' ? '画像を読み込み中…' : 'Geminiで解析中…'}
+                {status === 'uploading'
+                  ? '画像を読み込み中…'
+                  : status === 'analyzing'
+                  ? 'Geminiで解析中…'
+                  : 'Firebaseに保存中…'}
               </p>
               <p className="text-xs text-white/70">完了するまで画面を閉じずにお待ちください。</p>
             </div>
