@@ -522,13 +522,15 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
 
               const reservationsForDay = day.reservations;
               const slotDetails = buildSlotDetails(reservationsForDay);
-              const totalEntries = slotDetails.reduce(
+              const totalActiveEntries = slotDetails.reduce(
                 (sum, detail) => sum + detail.totalEntries,
                 0,
               );
-              const hasSlotEntries = totalEntries > 0;
+              const hasDisplayEntries = slotDetails.some(
+                (detail) => detail.facilities.length > 0,
+              );
 
-              const backgroundClass = getReservationBackgroundClass(totalEntries);
+              const backgroundClass = getReservationBackgroundClass(totalActiveEntries);
 
               const cellClass = [
                 'flex min-h-[92px] flex-col gap-2 rounded-lg p-2 text-left text-sm transition sm:min-h-[120px] sm:p-3',
@@ -570,40 +572,41 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                     <span className={dateBadgeClass}>{day.date.day}</span>
                   </div>
 
-                  {hasSlotEntries ? (
+                  {hasDisplayEntries ? (
                     <div className="flex grow flex-col gap-1 text-[10px] leading-tight text-zinc-600 sm:text-[11px]">
                       <ul className="flex flex-col gap-1 text-[9px] text-zinc-500 sm:text-[10px]">
                         {slotDetails.map((detail) => {
-                          if (detail.totalEntries === 0) {
+                          if (detail.facilities.length === 0) {
                             return null;
                           }
 
-                          const facilityNames = Array.from(
-                            new Set(
-                              detail.facilities.map((facility) => facility.gymName),
-                            ),
-                          );
+                          return detail.facilities.map((facility, facilityIndex) => {
+                            const facilityLabel =
+                              facility.gymName && facility.gymName.length > 0
+                                ? facility.gymName
+                                : '施設名未設定';
+                            const participantsLabel =
+                              facility.participantNames.length > 0
+                                ? `（${facility.participantNames.join('、')}）`
+                                : '';
+                            const facilityTextClass = facility.isStruck
+                              ? 'line-clamp-1 text-[10px] font-medium text-zinc-400 line-through decoration-zinc-400 sm:whitespace-nowrap sm:pl-1.5'
+                              : 'line-clamp-1 text-[10px] font-medium text-zinc-600 sm:whitespace-nowrap sm:pl-1.5';
 
-                          const slotSummary =
-                            facilityNames.length > 0
-                              ? facilityNames.join('／')
-                              : '施設名未設定';
-
-                          const facilityLabel = facilityNames.join('／') || '施設名未設定';
-
-                          return (
-                            <li
-                              key={`${day.key}-${detail.slotId}`}
-                              className="text-zinc-600"
-                            >
-                              <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
-                                {SLOT_LABELS[detail.slotId]}
-                              </span>
-                              <span className="mt-1 block truncate text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:max-w-full sm:truncate sm:pl-1.5">
-                                {facilityLabel}
-                              </span>
-                            </li>
-                          );
+                            return (
+                              <li
+                                key={`${day.key}-${detail.slotId}-${facility.reservationId}-${facilityIndex}`}
+                                className="text-zinc-600"
+                              >
+                                <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
+                                  {SLOT_LABELS[detail.slotId]}
+                                </span>
+                                <span className={`mt-1 block sm:mt-0 sm:inline ${facilityTextClass}`}>
+                                  {facilityLabel}
+                                </span>
+                              </li>
+                            );
+                          });
                         })}
                       </ul>
                     </div>
@@ -664,7 +667,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
             <div className="flex-1 overflow-y-auto px-6 py-6">
               <div className="flex flex-col gap-4">
                 {selectedSlotDetails.map((detail) => {
-                  const hasEntries = detail.totalEntries > 0;
+                  const hasEntries = detail.facilities.length > 0;
                   const slotBackground = getReservationBackgroundClass(detail.totalEntries);
 
                   return (
@@ -682,7 +685,9 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                           {SLOT_LABELS[detail.slotId]}
                         </span>
                         <span className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-                          <span>{hasEntries ? `${detail.totalEntries}件` : '予約なし'}</span>
+                          <span>
+                            {hasEntries ? `${detail.facilities.length}件` : '予約なし'}
+                          </span>
                           <span aria-hidden="true" className="text-base text-zinc-400">
                             ↗
                           </span>
