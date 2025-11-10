@@ -105,8 +105,8 @@ type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
 };
 
-const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
-  SLOT_ORDER.map((slotId) => {
+const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
+  return SLOT_ORDER.map((slotId) => {
     const facilities: SlotFacilityDetail[] = [];
 
     reservations.forEach((reservation) => {
@@ -139,10 +139,12 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
 
     facilities.sort((a, b) => Number(a.isStruck) - Number(b.isStruck));
 
-    const totalEntries = facilities.reduce(
-      (sum, facility) => sum + facility.totalEntries,
-      0,
-    );
+    const totalEntries = facilities.reduce((sum, facility) => {
+      if (facility.isStruck) {
+        return sum;
+      }
+      return sum + facility.totalEntries;
+    }, 0);
 
     return {
       slotId,
@@ -150,6 +152,7 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
       totalEntries,
     };
   });
+};
 
 const buildCalendarGrid = (monthAnchor: SimpleDate, today: SimpleDate) => {
   const firstDayOfMonth: SimpleDate = {
@@ -438,8 +441,8 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
   const monthLabel = formatMonthLabel(displayMonth);
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-6 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
+    <div className="flex flex-col gap-4 sm:px-0">
+      <div className="flex flex-col gap-6 border border-zinc-200 bg-white p-0 shadow-sm sm:rounded-2xl sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -497,7 +500,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-zinc-200">
+        <div className="overflow-hidden border border-zinc-200 sm:rounded-xl">
           <div className="grid grid-cols-7 bg-zinc-50 text-center text-xs font-semibold uppercase tracking-wide text-zinc-600 sm:text-sm">
             {WEEKDAYS.map((weekday) => (
               <div key={weekday} className="p-2 sm:p-3">
