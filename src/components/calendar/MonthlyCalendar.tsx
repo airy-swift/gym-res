@@ -5,10 +5,10 @@ import {
   useEffect,
   useMemo,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 
+import { useReservationParticipants } from '@/components/providers/ReservationParticipantsProvider';
 import {
   addDays,
   addMonths,
@@ -27,6 +27,7 @@ import {
   type ReservationDayRecord,
   type ReservationSlotEntry,
   type ReservationSlotId,
+  type ReservationSlots,
 } from '@/lib/firebase';
 
 type CalendarDay = {
@@ -50,8 +51,20 @@ const SLOT_ORDER: ReservationSlotId[] = ['morning', 'afternoon', 'night'];
 
 const FACILITY_SEARCH_BASE_URL =
   'https://yoyaku.harp.lg.jp/sapporo/FacilitySearch/Index/';
+const SCHOOL_SEARCH_BASE_URL =
+  'https://yoyaku.harp.lg.jp/sapporo/FacilitySearch/Index/';
 
 const FACILITY_SEARCH_DEFAULT_PARAMS: Array<[string, string]> = [
+  ['u[0]', '28'],
+  ['f[0]', '011002_0004'],
+  ['f[1]', '011002_0005'],
+  ['f[2]', '011002_0010'],
+  ['f[3]', '011002_0020'],
+  ['f[4]', '011002_0030'],
+  ['f[5]', '011002_0040'],
+];
+
+const SCHOOL_SEARCH_DEFAULT_PARAMS: Array<[string, string]> = [
   ['u[0]', '28'],
   ['f[0]', '011002_0004'],
   ['f[1]', '011002_0005'],
@@ -66,8 +79,8 @@ const SLOT_PT_PARAM_MAP: Record<
   { key: string; value: string }
 > = {
   morning: { key: 'pt[0]', value: '0' },
-  afternoon: { key: 'pt[1]', value: '1' },
-  night: { key: 'pt[2]', value: '2' },
+  afternoon: { key: 'pt[0]', value: '1' },
+  night: { key: 'pt[0]', value: '2' },
 };
 
 const getReservationBackgroundClass = (count: number): string => {
@@ -203,7 +216,45 @@ const buildReservationMap = (reservations: ReservationDayRecord[]): ReservationM
   return map;
 };
 
+const filterReservationEntriesByParticipant = (
+  entries: ReservationSlotEntry[] | undefined,
+  participantName: string,
+): ReservationSlotEntry[] =>
+  (entries ?? []).filter(
+    (entry) => (entry.name?.trim() ?? '') === participantName,
+  );
+
+const filterReservationsByParticipant = (
+  reservations: ReservationDayRecord[],
+  participantName: string,
+): ReservationDayRecord[] =>
+  reservations
+    .map((reservation) => {
+      const filteredSlots = SLOT_ORDER.reduce((acc, slotId) => {
+        acc[slotId] = filterReservationEntriesByParticipant(
+          reservation.slots?.[slotId],
+          participantName,
+        );
+        return acc;
+      }, {} as ReservationSlots);
+
+      const hasEntries = SLOT_ORDER.some((slotId) => filteredSlots[slotId]?.length);
+      if (!hasEntries) {
+        return null;
+      }
+
+      return {
+        ...reservation,
+        slots: filteredSlots,
+      };
+    })
+    .filter((reservation): reservation is ReservationDayRecord => reservation !== null);
+
 export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarProps) => {
+  const { participantName } = useReservationParticipants();
+  const normalizedParticipantName = useMemo(() => participantName.trim(), [participantName]);
+  const canFilterByParticipant = normalizedParticipantName.length > 0;
+  const [showOwnReservationsOnly, setShowOwnReservationsOnly] = useState(false);
   const today = useMemo(() => getTodayInJst(), []);
   const [displayMonth, setDisplayMonth] = useState<SimpleDate>(() => ({
     ...getNextMonth(today),
@@ -219,6 +270,12 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     displayMonth,
     today,
   ]);
+
+  useEffect(() => {
+    if (!canFilterByParticipant && showOwnReservationsOnly) {
+      setShowOwnReservationsOnly(false);
+    }
+  }, [canFilterByParticipant, showOwnReservationsOnly]);
 
   useEffect(() => {
     let isMounted = true;
@@ -277,6 +334,20 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     [calendar, reservations],
   );
 
+  const displayCalendarDays = useMemo(() => {
+    if (!showOwnReservationsOnly || !canFilterByParticipant) {
+      return calendarDays;
+    }
+
+    return calendarDays.map((day) => ({
+      ...day,
+      reservations: filterReservationsByParticipant(
+        day.reservations,
+        normalizedParticipantName,
+      ),
+    }));
+  }, [calendarDays, canFilterByParticipant, normalizedParticipantName, showOwnReservationsOnly]);
+
   const openDetailDialog = useCallback((day: CalendarDay) => {
     setSelectedDay(day);
     setIsDetailDialogOpen(true);
@@ -304,28 +375,61 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     };
   }, [closeDetailDialog, isDetailDialogOpen]);
 
+  useEffect(() => {
+    if (!selectedDay) {
+      return;
+    }
+
+    const nextDay = displayCalendarDays.find((day) => day.key === selectedDay.key);
+    if (!nextDay || nextDay.reservations.length === 0) {
+      setIsDetailDialogOpen(false);
+      setSelectedDay(null);
+      return;
+    }
+
+    if (nextDay !== selectedDay) {
+      setSelectedDay(nextDay);
+    }
+  }, [displayCalendarDays, selectedDay]);
+
   const selectedSlotDetails = selectedDay
     ? buildSlotDetails(selectedDay.reservations)
     : [];
 
-  const buildFacilitySearchUrl = useCallback(
-    (slotId: ReservationSlotId): string | null => {
+  const buildReservationSearchUrl = useCallback(
+    (
+      slotId: ReservationSlotId,
+      baseUrl: string,
+      defaultParams: Array<[string, string]>,
+    ): string | null => {
       if (!selectedDay) {
         return null;
       }
 
-      const url = new URL(FACILITY_SEARCH_BASE_URL);
-      FACILITY_SEARCH_DEFAULT_PARAMS.forEach(([key, value]) => {
+      const url = new URL(baseUrl);
+      defaultParams.forEach(([key, value]) => {
         url.searchParams.set(key, value);
       });
       url.searchParams.set('ud', toDateKey(selectedDay.date));
 
       const slotParam = SLOT_PT_PARAM_MAP[slotId];
-      url.searchParams.set(slotParam.key, slotParam.value);
+      if (slotParam) {
+        url.searchParams.set(slotParam.key, slotParam.value);
+      }
 
       return url.toString();
     },
     [selectedDay],
+  );
+
+  const buildFacilitySearchUrl = useCallback(
+    (slotId: ReservationSlotId): string | null =>
+      buildReservationSearchUrl(
+        slotId,
+        FACILITY_SEARCH_BASE_URL,
+        FACILITY_SEARCH_DEFAULT_PARAMS,
+      ),
+    [buildReservationSearchUrl],
   );
 
   const openFacilitySearchPage = useCallback(
@@ -339,14 +443,25 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     [buildFacilitySearchUrl],
   );
 
-  const handleSlotCardKeyDown = useCallback(
-    (event: ReactKeyboardEvent<HTMLDivElement>, slotId: ReservationSlotId) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        openFacilitySearchPage(slotId);
+  const buildSchoolSearchUrl = useCallback(
+    (slotId: ReservationSlotId): string | null =>
+      buildReservationSearchUrl(
+        slotId,
+        SCHOOL_SEARCH_BASE_URL,
+        SCHOOL_SEARCH_DEFAULT_PARAMS,
+      ),
+    [buildReservationSearchUrl],
+  );
+
+  const openSchoolSearchPage = useCallback(
+    (slotId: ReservationSlotId) => {
+      const url = buildSchoolSearchUrl(slotId);
+      if (!url) {
+        return;
       }
+      window.open(url, '_blank', 'noopener,noreferrer');
     },
-    [openFacilitySearchPage],
+    [buildSchoolSearchUrl],
   );
 
   const handleToggleFacilityStrike = useCallback(
@@ -439,6 +554,21 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
   };
 
   const monthLabel = formatMonthLabel(displayMonth);
+  const filterButtonClassName = [
+    'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
+    showOwnReservationsOnly
+      ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm'
+      : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900',
+    !canFilterByParticipant ? 'cursor-not-allowed opacity-60 hover:border-zinc-200 hover:text-zinc-600' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const filterButtonTitle = canFilterByParticipant
+    ? '自分の予約のみを表示'
+    : '予約者名を設定すると利用できます';
+  const filterStateLabelClassName = showOwnReservationsOnly
+    ? 'text-xs font-semibold uppercase tracking-wide text-emerald-700'
+    : 'text-xs font-semibold uppercase tracking-wide text-zinc-400';
 
   return (
     <div className="flex flex-col gap-4 sm:px-0">
@@ -450,6 +580,40 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                canFilterByParticipant
+                  ? setShowOwnReservationsOnly((prev) => !prev)
+                  : undefined
+              }
+              disabled={!canFilterByParticipant}
+              aria-pressed={showOwnReservationsOnly}
+              title={filterButtonTitle}
+              className={filterButtonClassName}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3 4.5h18M5.25 9.75h13.5M8.25 15h7.5M10.5 19.5h3"
+                />
+              </svg>
+              <div className="flex items-center gap-2">
+                <span>自分の予約のみ</span>
+                <span className={filterStateLabelClassName}>
+                  {showOwnReservationsOnly ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            </button>
             {onRequestScreenshotUpload ? (
               <button
                 type="button"
@@ -509,7 +673,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
             ))}
           </div>
           <div className="grid grid-cols-7 gap-px bg-zinc-100">
-            {calendarDays.map((day) => {
+            {displayCalendarDays.map((day) => {
               if (!day.isCurrentMonth) {
                 return (
                   <div
@@ -526,9 +690,16 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                 (sum, detail) => sum + detail.totalEntries,
                 0,
               );
-              const hasDisplayEntries = slotDetails.some(
-                (detail) => detail.facilities.length > 0,
+              const totalStruckFacilities = slotDetails.reduce((sum, detail) => {
+                const struckCount = detail.facilities.filter(
+                  (facility) => facility.isStruck,
+                ).length;
+                return sum + struckCount;
+              }, 0);
+              const hasActiveFacilities = slotDetails.some((detail) =>
+                detail.facilities.some((facility) => !facility.isStruck),
               );
+              const hasDisplayEntries = hasActiveFacilities || totalStruckFacilities > 0;
 
               const backgroundClass = getReservationBackgroundClass(totalActiveEntries);
 
@@ -575,39 +746,59 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                   {hasDisplayEntries ? (
                     <div className="flex grow flex-col gap-1 text-[10px] leading-tight text-zinc-600 sm:text-[11px]">
                       <ul className="flex flex-col gap-1 text-[9px] text-zinc-500 sm:text-[10px]">
-                        {slotDetails.map((detail) => {
-                          if (detail.facilities.length === 0) {
-                            return null;
+                        {(() => {
+                          const items: JSX.Element[] = [];
+
+                          slotDetails.forEach((detail) => {
+                            const activeFacilities = detail.facilities.filter(
+                              (facility) => !facility.isStruck,
+                            );
+
+                            activeFacilities.forEach((facility, facilityIndex) => {
+                              const facilityLabel =
+                                facility.gymName && facility.gymName.length > 0
+                                  ? facility.gymName
+                                  : '施設名未設定';
+                              const participantsLabel =
+                                facility.participantNames.length > 0
+                                  ? `（${facility.participantNames.join('、')}）`
+                                  : '';
+
+                              items.push(
+                                <li
+                                  key={`${day.key}-${detail.slotId}-${facility.reservationId}-${facilityIndex}`}
+                                  className="text-zinc-600"
+                                >
+                                  <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
+                                    {SLOT_LABELS[detail.slotId]}
+                                  </span>
+                                  <span
+                                    className="mt-1 block text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:pl-1.5 sm:whitespace-nowrap line-clamp-1"
+                                    aria-label={`${facilityLabel}${participantsLabel}`}
+                                    title={`${facilityLabel}${participantsLabel}`}
+                                  >
+                                    {facilityLabel}
+                                  </span>
+                                </li>,
+                              );
+                            });
+                          });
+
+                          if (totalStruckFacilities > 0) {
+                            items.push(
+                              <li
+                                key={`${day.key}-struck-summary`}
+                                className="text-zinc-400"
+                              >
+                                <span className="mt-1 block text-[10px] font-medium sm:mt-0 sm:inline">
+                                  {`${totalStruckFacilities}件省略`}
+                                </span>
+                              </li>,
+                            );
                           }
 
-                          return detail.facilities.map((facility, facilityIndex) => {
-                            const facilityLabel =
-                              facility.gymName && facility.gymName.length > 0
-                                ? facility.gymName
-                                : '施設名未設定';
-                            const participantsLabel =
-                              facility.participantNames.length > 0
-                                ? `（${facility.participantNames.join('、')}）`
-                                : '';
-                            const facilityTextClass = facility.isStruck
-                              ? 'line-clamp-1 text-[10px] font-medium text-zinc-400 line-through decoration-zinc-400 sm:whitespace-nowrap sm:pl-1.5'
-                              : 'line-clamp-1 text-[10px] font-medium text-zinc-600 sm:whitespace-nowrap sm:pl-1.5';
-
-                            return (
-                              <li
-                                key={`${day.key}-${detail.slotId}-${facility.reservationId}-${facilityIndex}`}
-                                className="text-zinc-600"
-                              >
-                                <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
-                                  {SLOT_LABELS[detail.slotId]}
-                                </span>
-                                <span className={`mt-1 block sm:mt-0 sm:inline ${facilityTextClass}`}>
-                                  {facilityLabel}
-                                </span>
-                              </li>
-                            );
-                          });
-                        })}
+                          return items;
+                        })()}
                       </ul>
                     </div>
                   ) : isLoading ? (
@@ -673,24 +864,38 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                   return (
                     <div
                       key={`${selectedDay.key}-${detail.slotId}`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`${SLOT_LABELS[detail.slotId]}枠の予約詳細と公式サイトを開く`}
                       className={`rounded-xl border border-zinc-200 px-4 py-3 transition hover:ring-2 hover:ring-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white ${slotBackground}`}
-                      onClick={() => openFacilitySearchPage(detail.slotId)}
-                      onKeyDown={(event) => handleSlotCardKeyDown(event, detail.slotId)}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-zinc-700">
-                          {SLOT_LABELS[detail.slotId]}
-                        </span>
-                        <span className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-                          <span>
-                            {hasEntries ? `${detail.facilities.length}件` : '予約なし'}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold text-zinc-700">
+                            {SLOT_LABELS[detail.slotId]}
                           </span>
-                          <span aria-hidden="true" className="text-base text-zinc-400">
-                            ↗
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-zinc-200 px-3 py-1 text-sm font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                              onClick={() => openFacilitySearchPage(detail.slotId)}
+                            >
+                              <span aria-hidden="true" className="text-xs text-blue-500">
+                                ↗
+                              </span>
+                              体育館
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 rounded-full border border-zinc-200 px-3 py-1 text-sm font-medium text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+                              onClick={() => openSchoolSearchPage(detail.slotId)}
+                            >
+                              <span aria-hidden="true" className="text-xs text-blue-500">
+                                ↗
+                              </span>
+                              学校
+                            </button>
+                          </div>
+                        </div>
+                        <span className="text-xs font-medium text-zinc-500">
+                          {hasEntries ? `${detail.facilities.length}件` : '予約なし'}
                         </span>
                       </div>
                       {hasEntries ? (
@@ -740,4 +945,3 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     </div>
   );
 };
-
