@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type ReactElement,
 } from 'react';
 
 import { useReservationParticipants } from '@/components/providers/ReservationParticipantsProvider';
@@ -747,7 +748,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                     <div className="flex grow flex-col gap-1 text-[10px] leading-tight text-zinc-600 sm:text-[11px]">
                       <ul className="flex flex-col gap-1 text-[9px] text-zinc-500 sm:text-[10px]">
                         {(() => {
-                          const items: JSX.Element[] = [];
+                          const items: ReactElement[] = [];
 
                           slotDetails.forEach((detail) => {
                             const activeFacilities = detail.facilities.filter(
