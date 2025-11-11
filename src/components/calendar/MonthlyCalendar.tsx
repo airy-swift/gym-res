@@ -381,7 +381,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
     }
 
     const nextDay = displayCalendarDays.find((day) => day.key === selectedDay.key);
-    if (!nextDay || nextDay.reservations.length === 0) {
+    if (!nextDay) {
       setIsDetailDialogOpen(false);
       setSelectedDay(null);
       return;
