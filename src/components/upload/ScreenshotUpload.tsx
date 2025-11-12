@@ -497,9 +497,9 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/30 px-0 py-0 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/30 px-4 py-6 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
         >
-          <div className="relative mx-auto flex min-h-[100vh] w-full max-w-3xl flex-col overflow-hidden bg-white shadow-xl sm:min-h-0 sm:rounded-2xl sm:max-h-[90vh]">
+          <div className="relative mx-auto flex w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl max-h-[calc(100vh-3rem)] sm:max-h-[90vh]">
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-5">
               <div>
                 <h2 className="text-xl font-semibold text-zinc-900">解析結果の確認</h2>
@@ -513,10 +513,21 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
                   setIsDialogOpen(false);
                   resetState();
                 }}
-                className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
+                className="inline-flex items-center justify-center rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
                 aria-label="ダイアログを閉じる"
               >
-                閉じる
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  className="h-4 w-4 sm:hidden"
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6l-12 12" />
+                </svg>
+                <span className="hidden sm:inline">閉じる</span>
               </button>
             </div>
 
@@ -653,4 +664,3 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
     </>
   );
 };
-

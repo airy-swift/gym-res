@@ -135,9 +135,9 @@ export const ReservationParticipantsProvider = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-0 py-0 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/40 px-4 py-6 sm:px-3 sm:py-6 sm:flex sm:items-center sm:justify-center"
         >
-          <div className="mx-auto flex min-h-[100vh] w-full max-w-lg flex-col bg-white p-4 shadow-2xl sm:min-h-0 sm:rounded-2xl sm:p-6">
+          <div className="mx-auto flex w-full max-w-lg flex-col rounded-2xl bg-white p-4 shadow-2xl max-h-[calc(100vh-3rem)] sm:max-h-[90vh] sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-xl font-semibold text-zinc-900">表示名の設定</h2>
@@ -149,9 +149,21 @@ export const ReservationParticipantsProvider = ({
                 <button
                   type="button"
                   onClick={closeEditor}
-                  className="rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
+                  className="inline-flex items-center justify-center rounded-full border border-zinc-200 px-3 py-1 text-sm text-zinc-500 transition hover:border-zinc-300 hover:text-zinc-700"
+                  aria-label="ダイアログを閉じる"
                 >
-                  閉じる
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    className="h-4 w-4 sm:hidden"
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 6l12 12M18 6l-12 12" />
+                  </svg>
+                  <span className="hidden sm:inline">閉じる</span>
                 </button>
               ) : null}
             </div>
@@ -207,4 +219,3 @@ export const useReservationParticipants = () => {
   }
   return context;
 };
-
