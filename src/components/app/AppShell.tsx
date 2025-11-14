@@ -52,7 +52,7 @@ const EditParticipantsButton = () => {
 const AppContent = () => {
   const [openScreenshotUpload, setOpenScreenshotUpload] = useState<(() => void) | null>(null);
   const [copyReservationsHandler, setCopyReservationsHandler] = useState<
-    (() => Promise<string | void>) | null
+    (() => Promise<string>) | null
   >(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [lastCopiedText, setLastCopiedText] = useState<string>('');
@@ -77,11 +77,7 @@ const AppContent = () => {
 
     try {
       const result = await copyReservationsHandler();
-      if (typeof result === 'string') {
-        setLastCopiedText(result);
-      } else {
-        setLastCopiedText('');
-      }
+      setLastCopiedText(result);
       setCopyStatus('copied');
     } catch (error) {
       console.error('Failed to copy reservations', error);
@@ -99,7 +95,7 @@ const AppContent = () => {
   }, [copyReservationsHandler]);
 
   const handleRegisterReservationExport = useCallback(
-    (handler: (() => Promise<void>) | null) => {
+    (handler: (() => Promise<string>) | null) => {
       setCopyReservationsHandler(() => handler);
     },
     [],

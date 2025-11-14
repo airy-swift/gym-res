@@ -186,7 +186,7 @@ type SlotDetail = {
 
 type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
-  onRegisterReservationExport?: (handler: (() => Promise<void>) | null) => void;
+  onRegisterReservationExport?: (handler: (() => Promise<string>) | null) => void;
 };
 
 const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
@@ -612,6 +612,7 @@ export const MonthlyCalendar = ({
 
   const monthLabel = formatMonthLabel(displayMonth);
   const monthPrefix = `${displayMonth.year}-${String(displayMonth.month).padStart(2, '0')}`;
+  const effectiveShowOwnReservationsOnly = canFilterByParticipant && showOwnReservationsOnly;
   const effectiveShowOwnReservationsOnly =
     canFilterByParticipant && showOwnReservationsOnly;
 
