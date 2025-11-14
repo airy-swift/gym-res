@@ -50,6 +50,7 @@ const SLOT_LABELS: Record<ReservationSlotId, string> = {
 
 const SLOT_ORDER: ReservationSlotId[] = ['morning', 'afternoon', 'night'];
 
+
 const FACILITY_SEARCH_BASE_URL =
   'https://yoyaku.harp.lg.jp/sapporo/FacilitySearch/Index/';
 const SCHOOL_SEARCH_BASE_URL =
@@ -99,6 +100,42 @@ const getReservationBackgroundClass = (count: number): string => {
 
 const sanitizeGymName = (gymName: string | null | undefined): string =>
   gymName && gymName.trim().length > 0 ? gymName.trim() : '施設名未設定';
+
+const formatTimeValue = (value: string | null | undefined): string | null => {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const [hourRaw, minuteRaw] = trimmed.split(':');
+  if (!hourRaw) {
+    return trimmed;
+  }
+
+  const hourNumber = Number(hourRaw);
+  const normalizedHour = Number.isFinite(hourNumber) ? String(hourNumber) : hourRaw;
+
+  if (typeof minuteRaw === 'undefined' || minuteRaw.length === 0) {
+    return normalizedHour;
+  }
+
+  return `${normalizedHour}:${minuteRaw}`;
+};
+
+const formatTimeRange = (
+  startTime: string | null | undefined,
+  endTime: string | null | undefined,
+): string | null => {
+  const start = formatTimeValue(startTime);
+  const end = formatTimeValue(endTime);
+  if (!start || !end) {
+    return null;
+  }
+  return `${start}〜${end}`;
+};
 
 const copyTextToClipboard = async (text: string): Promise<void> => {
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
@@ -617,25 +654,39 @@ export const MonthlyCalendar = ({
 
     records.forEach((reservation) => {
       const gymName = sanitizeGymName(reservation.gymName);
+      const [yearStr, monthStr, dayStr] = reservation.date.split('-');
+      const simpleDate: SimpleDate | null = yearStr && monthStr && dayStr
+        ? {
+            year: Number(yearStr),
+            month: Number(monthStr),
+            day: Number(dayStr),
+          }
+        : null;
+      if (!simpleDate || !simpleDate.year || !simpleDate.month || !simpleDate.day) {
+        return;
+      }
+      const weekdayLabel = WEEKDAYS[getDayOfWeek(simpleDate)] ?? '';
+
       SLOT_ORDER.forEach((slotId) => {
         const slotEntries = reservation.slots?.[slotId] ?? [];
-        const activeEntry = slotEntries.find((entry) => !entry.strike);
-        if (!activeEntry) {
+        const activeEntries = slotEntries.filter((entry) => !entry.strike);
+        if (activeEntries.length === 0) {
           return;
         }
-        const slotLabel = SLOT_LABELS[slotId];
-        const timeText = activeEntry.startTime && activeEntry.endTime
-          ? `${activeEntry.startTime}~${activeEntry.endTime}`
-          : activeEntry.startTime
-          ? `${activeEntry.startTime}~`
-          : activeEntry.endTime
-          ? `~${activeEntry.endTime}`
-          : '';
-        const parts = [reservation.date, gymName, slotLabel];
-        if (timeText) {
-          parts.push(timeText);
-        }
-        lines.push(parts.join(' '));
+
+        activeEntries.forEach((entry) => {
+          const monthNumeric = Number(monthStr);
+          const dayNumeric = Number(dayStr);
+          if (!monthNumeric || !dayNumeric) {
+            return;
+          }
+
+          const timeSegment = formatTimeRange(entry.startTime, entry.endTime);
+          const line = timeSegment
+            ? `　${monthNumeric}月${dayNumeric}日（${weekdayLabel}）${timeSegment}\n　　@${gymName}`
+            : `　${monthNumeric}月${dayNumeric}日（${weekdayLabel}）\n　　@${gymName}`;
+          lines.push(line);
+        });
       });
     });
 
