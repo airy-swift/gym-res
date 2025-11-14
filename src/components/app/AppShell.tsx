@@ -118,7 +118,7 @@ const AppContent = () => {
                 type="button"
                 onClick={handleCopyReservations}
                 disabled={!copyReservationsHandler}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-sm font-medium text-emerald-700 shadow-sm transition hover:border-emerald-400 hover:bg-emerald-200 hover:text-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"

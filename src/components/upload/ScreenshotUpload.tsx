@@ -181,13 +181,13 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
   const { participants, participantName, isReady: areParticipantsReady, openEditor } =
     useReservationParticipants();
   const [isDragging, setIsDragging] = useState(false);
-  const [dragDepth, setDragDepth] = useState(0);
   const [status, setStatus] = useState<AnalysisStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reviewState, setReviewState] = useState<ReviewState>(() => initialReviewState());
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
 
   const resetState = useCallback(() => {
     setReviewState(initialReviewState());
@@ -207,7 +207,7 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
         (item) => item.kind === 'file',
       );
       if (hasFiles) {
-        setDragDepth((prev) => prev + 1);
+        dragDepthRef.current += 1;
         setIsDragging(true);
       }
     },
@@ -217,13 +217,10 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
   const handleDragLeave = useCallback((event: DragEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    setDragDepth((prev) => {
-      const next = Math.max(prev - 1, 0);
-      if (next === 0) {
-        setIsDragging(false);
-      }
-      return next;
-    });
+    dragDepthRef.current = Math.max(dragDepthRef.current - 1, 0);
+    if (dragDepthRef.current === 0) {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDragOver = useCallback((event: DragEvent) => {
@@ -307,7 +304,7 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
     async (event: DragEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      setDragDepth(0);
+      dragDepthRef.current = 0;
       setIsDragging(false);
 
       if (!event.dataTransfer?.files?.length) {

@@ -351,19 +351,12 @@ export const MonthlyCalendar = ({
   const [reservations, setReservations] = useState<ReservationMap>({});
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<CalendarDay | null>(null);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const calendar = useMemo(() => buildCalendarGrid(displayMonth, today), [
     displayMonth,
     today,
   ]);
-
-  useEffect(() => {
-    if (!canFilterByParticipant && showOwnReservationsOnly) {
-      setShowOwnReservationsOnly(false);
-    }
-  }, [canFilterByParticipant, showOwnReservationsOnly]);
 
   useEffect(() => {
     let isMounted = true;
@@ -373,9 +366,10 @@ export const MonthlyCalendar = ({
     const startKey = toDateKey(calendar.gridStart);
     const endKey = toDateKey(calendar.gridEnd);
 
-    setIsLoading(true);
-
     const connect = async () => {
+      if (isMounted) {
+        setIsLoading(true);
+      }
       try {
         const initial = await listReservationDaysInRange(startKey, endKey);
         if (!isMounted) {
@@ -423,7 +417,7 @@ export const MonthlyCalendar = ({
   );
 
   const displayCalendarDays = useMemo(() => {
-    if (!showOwnReservationsOnly || !canFilterByParticipant) {
+    if (!canFilterByParticipant || !showOwnReservationsOnly) {
       return calendarDays;
     }
 
@@ -436,14 +430,21 @@ export const MonthlyCalendar = ({
     }));
   }, [calendarDays, canFilterByParticipant, normalizedParticipantName, showOwnReservationsOnly]);
 
+  const selectedDay = useMemo(() => {
+    if (!selectedDayKey) {
+      return null;
+    }
+    return displayCalendarDays.find((day) => day.key === selectedDayKey) ?? null;
+  }, [displayCalendarDays, selectedDayKey]);
+
+  const isDetailDialogOpen = Boolean(selectedDay);
+
   const openDetailDialog = useCallback((day: CalendarDay) => {
-    setSelectedDay(day);
-    setIsDetailDialogOpen(true);
+    setSelectedDayKey(day.key);
   }, []);
 
   const closeDetailDialog = useCallback(() => {
-    setIsDetailDialogOpen(false);
-    setSelectedDay(null);
+    setSelectedDayKey(null);
   }, []);
 
   useEffect(() => {
@@ -462,23 +463,6 @@ export const MonthlyCalendar = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [closeDetailDialog, isDetailDialogOpen]);
-
-  useEffect(() => {
-    if (!selectedDay) {
-      return;
-    }
-
-    const nextDay = displayCalendarDays.find((day) => day.key === selectedDay.key);
-    if (!nextDay) {
-      setIsDetailDialogOpen(false);
-      setSelectedDay(null);
-      return;
-    }
-
-    if (nextDay !== selectedDay) {
-      setSelectedDay(nextDay);
-    }
-  }, [displayCalendarDays, selectedDay]);
 
   const selectedSlotDetails = selectedDay
     ? buildSlotDetails(selectedDay.reservations)
@@ -558,8 +542,6 @@ export const MonthlyCalendar = ({
         return;
       }
 
-      const targetDayKey = selectedDay.key;
-
       const targetReservation = selectedDay.reservations.find(
         (reservation) => reservation.id === facility.reservationId,
       );
@@ -583,19 +565,6 @@ export const MonthlyCalendar = ({
           [slotId]: updatedSlotEntries,
         },
       };
-
-      setSelectedDay((prev) => {
-        if (!prev || prev.key !== targetDayKey) {
-          return prev;
-        }
-
-        return {
-          ...prev,
-          reservations: prev.reservations.map((reservation) =>
-            reservation.id === updatedReservation.id ? updatedReservation : reservation,
-          ),
-        };
-      });
 
       setReservations((prev) => {
         const dayReservations = prev[updatedReservation.date];
@@ -643,6 +612,8 @@ export const MonthlyCalendar = ({
 
   const monthLabel = formatMonthLabel(displayMonth);
   const monthPrefix = `${displayMonth.year}-${String(displayMonth.month).padStart(2, '0')}`;
+  const effectiveShowOwnReservationsOnly =
+    canFilterByParticipant && showOwnReservationsOnly;
 
   const copyCurrentMonthReservations = useCallback(async () => {
     const records = Object.values(reservations)
@@ -709,7 +680,7 @@ export const MonthlyCalendar = ({
 
   const filterButtonClassName = [
     'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
-    showOwnReservationsOnly
+    effectiveShowOwnReservationsOnly
       ? 'border-emerald-600 bg-emerald-50 text-emerald-700 shadow-sm'
       : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900',
     !canFilterByParticipant ? 'cursor-not-allowed opacity-60 hover:border-zinc-200 hover:text-zinc-600' : '',
@@ -719,7 +690,7 @@ export const MonthlyCalendar = ({
   const filterButtonTitle = canFilterByParticipant
     ? '自分の予約のみを表示'
     : '予約者名を設定すると利用できます';
-  const filterStateLabelClassName = showOwnReservationsOnly
+  const filterStateLabelClassName = effectiveShowOwnReservationsOnly
     ? 'text-xs font-semibold uppercase tracking-wide text-emerald-700'
     : 'text-xs font-semibold uppercase tracking-wide text-zinc-400';
 
@@ -741,7 +712,7 @@ export const MonthlyCalendar = ({
                   : undefined
               }
               disabled={!canFilterByParticipant}
-              aria-pressed={showOwnReservationsOnly}
+              aria-pressed={effectiveShowOwnReservationsOnly}
               title={filterButtonTitle}
               className={filterButtonClassName}
             >
@@ -763,7 +734,7 @@ export const MonthlyCalendar = ({
               <div className="flex items-center gap-2">
                 <span>自分の予約のみ</span>
                 <span className={filterStateLabelClassName}>
-                  {showOwnReservationsOnly ? 'ON' : 'OFF'}
+                  {effectiveShowOwnReservationsOnly ? 'ON' : 'OFF'}
                 </span>
               </div>
             </button>
@@ -976,7 +947,7 @@ export const MonthlyCalendar = ({
         )}
       </div>
 
-      {isDetailDialogOpen && selectedDay ? (
+      {selectedDay ? (
         <div
           role="dialog"
           aria-modal="true"
