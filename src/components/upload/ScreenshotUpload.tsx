@@ -25,6 +25,8 @@ type ReviewReservationEntry = {
   id: string;
   slot: ReservationSlotId;
   names: string[];
+  startTime: string;
+  endTime: string;
 };
 
 type ReviewReservation = {
@@ -46,6 +48,33 @@ const SLOT_LABELS: Record<ReservationSlotId, string> = {
 };
 
 const SLOT_ORDER: ReservationSlotId[] = ['morning', 'afternoon', 'night'];
+
+type TimePreset = {
+  id: string;
+  label: string;
+  startTime: string;
+  endTime: string;
+  slot: ReservationSlotId;
+};
+
+const TIME_PRESET_OPTIONS: TimePreset[] = [
+  { id: 'morning-1', label: '09:00~12:00', startTime: '09:00', endTime: '12:00', slot: 'morning' },
+  { id: 'afternoon-1', label: '11:45~14:15', startTime: '11:45', endTime: '14:15', slot: 'afternoon' },
+  { id: 'afternoon-2', label: '13:00~17:00', startTime: '13:00', endTime: '17:00', slot: 'afternoon' },
+  { id: 'afternoon-3', label: '14:30~17:00', startTime: '14:30', endTime: '17:00', slot: 'afternoon' },
+  { id: 'night-1', label: '18:00~21:00', startTime: '18:00', endTime: '21:00', slot: 'night' },
+  { id: 'night-2', label: '19:15~21:45', startTime: '19:15', endTime: '21:45', slot: 'night' },
+];
+
+const getPresetIdForEntry = (entry: ReviewReservationEntry): string => {
+  const preset = TIME_PRESET_OPTIONS.find(
+    (option) =>
+      option.slot === entry.slot &&
+      option.startTime === entry.startTime &&
+      option.endTime === entry.endTime,
+  );
+  return preset?.id ?? '';
+};
 
 const readFileAsBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -82,6 +111,9 @@ const createReservationEntryId = () =>
     ? crypto.randomUUID()
     : `entry-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
+const toReviewTime = (value: string | null | undefined): string =>
+  value && value.trim().length > 0 ? value.trim() : '';
+
 const convertAnalysesToReview = (
   analyses: GeminiReservationAnalysisResult,
 ): ReviewState => {
@@ -89,11 +121,14 @@ const convertAnalysesToReview = (
     const entries: ReviewReservationEntry[] = [];
 
     SLOT_ORDER.forEach((slot) => {
-      if ((analysis.slots[slot] ?? []).length > 0) {
+      const slotDetail = analysis.slots[slot];
+      if ((slotDetail.names ?? []).length > 0) {
         entries.push({
           id: createReservationEntryId(),
           slot,
-          names: analysis.slots[slot] ?? [],
+          names: slotDetail.names ?? [],
+          startTime: toReviewTime(slotDetail.startTime),
+          endTime: toReviewTime(slotDetail.endTime),
         });
       }
     });
@@ -103,6 +138,8 @@ const convertAnalysesToReview = (
         id: createReservationEntryId(),
         slot: 'morning',
         names: [],
+        startTime: '',
+        endTime: '',
       });
     }
 
@@ -319,18 +356,32 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
     [],
   );
 
-  const updateReservationEntrySlot = useCallback(
-    (reservationId: string, entryId: string, slot: ReservationSlotId) => {
+  const updateReservationEntryPreset = useCallback(
+    (reservationId: string, entryId: string, presetId: string) => {
+      const preset = TIME_PRESET_OPTIONS.find((option) => option.id === presetId);
+
       updateReservation(reservationId, (prevReservation) => ({
         ...prevReservation,
-        entries: prevReservation.entries.map((entry) =>
-          entry.id === entryId
-            ? {
-                ...entry,
-                slot,
-              }
-            : entry,
-        ),
+        entries: prevReservation.entries.map((entry) => {
+          if (entry.id !== entryId) {
+            return entry;
+          }
+
+          if (!preset) {
+            return {
+              ...entry,
+              startTime: '',
+              endTime: '',
+            };
+          }
+
+          return {
+            ...entry,
+            slot: preset.slot,
+            startTime: preset.startTime,
+            endTime: preset.endTime,
+          };
+        }),
       }));
     },
     [updateReservation],
@@ -351,10 +402,15 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
           .map((rawName) => rawName.trim())
           .filter((name) => name.length > 0);
 
+        const normalizedStart = toReviewTime(entry.startTime);
+        const normalizedEnd = toReviewTime(entry.endTime);
+
         base[entry.slot] = sanitizedNames.map((name) => ({
           name,
           source: hasAiNames ? 'ai' : 'manual',
           strike: false,
+          startTime: normalizedStart || null,
+          endTime: normalizedEnd || null,
         }));
       });
 
@@ -594,25 +650,27 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
                               />
                             </label>
 
-                            <label className="flex flex-1 min-w-[120px] flex-col gap-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
-                              <span>時間帯</span>
+                            <label className="flex flex-1 min-w-[220px] flex-col gap-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                              <span>枠 / 時間</span>
                               <select
-                                value={entry.slot}
+                                value={getPresetIdForEntry(entry)}
                                 onChange={(event) =>
-                                  updateReservationEntrySlot(
+                                  updateReservationEntryPreset(
                                     reservation.id,
                                     entry.id,
-                                    event.target.value as ReservationSlotId,
+                                    event.target.value,
                                   )
                                 }
                                 className="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                               >
-                                {SLOT_ORDER.map((slot) => (
-                                  <option key={slot} value={slot}>
-                                    {SLOT_LABELS[slot]}
-                                  </option>
+                                <option value="">時間帯を選択</option>
+                                {TIME_PRESET_OPTIONS.map((option) => (
+                                  <option key={option.id} value={option.id}>{`${SLOT_LABELS[option.slot]} ${option.label}`}</option>
                                 ))}
                               </select>
+                              <span className="text-[11px] text-zinc-500">
+                                現在: {entry.startTime || entry.endTime ? `${entry.startTime || '--:--'}~${entry.endTime || '--:--'}` : '未設定'}
+                              </span>
                             </label>
                           </div>
                         ))}

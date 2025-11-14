@@ -1,11 +1,17 @@
 import { type ReservationSlotId } from '@/lib/firebase';
 
-export type GeminiSlotNames = Record<ReservationSlotId, string[]>;
+export type GeminiSlotDetail = {
+  names: string[];
+  startTime: string | null;
+  endTime: string | null;
+};
+
+export type GeminiSlotDetails = Record<ReservationSlotId, GeminiSlotDetail>;
 
 export type GeminiReservationAnalysis = {
   date: string;
   gymName?: string | null;
-  slots: GeminiSlotNames;
+  slots: GeminiSlotDetails;
 };
 
 export type GeminiReservationAnalysisResult = GeminiReservationAnalysis[];
@@ -21,10 +27,11 @@ const buildAnalysisPrompt = (participants: string[]): string => {
 
 1. 予約日（西暦 YYYY-MM-DD）
 2. 施設名 (体育館名のみで良い。「体育室, 競技室」などは不要。)
-3. 各時間枠（morning / afternoon / night）の予約者名リスト
+3. 各時間枠（morning / afternoon / night）の予約者名リストと開始/終了時刻
    - 時間枠は必ず "morning" (午前), "afternoon" (午後), "night" (夜) の3種類のキーを用いる
-   - 画像に該当枠の情報が無い場合はslotsの中のkeyごと必要ありません。
+   - 画像に該当枠の情報が無い場合は slots 内の該当キーを空配列として返す
    - 各枠には同じ予約者名を使用する
+   - 開始・終了時刻は 24 時間表記 (例: "09:00") で返し、不明な場合は null または空文字を入れる
 
 出力は必ず下記の JSON 形式（余計な空白や説明文を含めない）で返してください。
   - 複数のデータがある場合は日付の若い順でソートしてください。
@@ -34,9 +41,21 @@ const buildAnalysisPrompt = (participants: string[]): string => {
   "date": "YYYY-MM-DD",
   "gymName": "施設名（不明なら \"\" または null）",
   "slots": {
-    "morning": [],
-    "afternoon": [],
-    "night": []
+    "morning": {
+      "names": [],
+      "startTime": "HH:MM",
+      "endTime": "HH:MM"
+    },
+    "afternoon": {
+      "names": [],
+      "startTime": "HH:MM",
+      "endTime": "HH:MM"
+    },
+    "night": {
+      "names": [],
+      "startTime": "HH:MM",
+      "endTime": "HH:MM"
+    }
   }
 }
 `.trim();
@@ -71,10 +90,46 @@ const extractResponseText = (response: GeminiResponse): string | null => {
   return part?.text ?? null;
 };
 
-const normalizeSlotNames = (slots: Partial<Record<string, string[]>>): GeminiSlotNames => ({
-  morning: Array.isArray(slots.morning) ? slots.morning : [],
-  afternoon: Array.isArray(slots.afternoon) ? slots.afternoon : [],
-  night: Array.isArray(slots.night) ? slots.night : [],
+const sanitizeNames = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value
+        .map((name) => (typeof name === 'string' ? name.trim() : ''))
+        .filter((name) => name.length > 0)
+    : [];
+
+const sanitizeTime = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+const normalizeSlotDetail = (value: unknown): GeminiSlotDetail => {
+  if (Array.isArray(value)) {
+    return {
+      names: sanitizeNames(value),
+      startTime: null,
+      endTime: null,
+    };
+  }
+
+  if (value && typeof value === 'object') {
+    const candidate = value as { names?: unknown; startTime?: unknown; endTime?: unknown };
+    const names = sanitizeNames(candidate.names);
+    return {
+      names,
+      startTime: sanitizeTime(candidate.startTime),
+      endTime: sanitizeTime(candidate.endTime),
+    };
+  }
+
+  return {
+    names: [],
+    startTime: null,
+    endTime: null,
+  };
+};
+
+const normalizeSlotDetails = (slots: Partial<Record<string, unknown>>): GeminiSlotDetails => ({
+  morning: normalizeSlotDetail(slots.morning),
+  afternoon: normalizeSlotDetail(slots.afternoon),
+  night: normalizeSlotDetail(slots.night),
 });
 
 const normalizeAnalysis = (value: unknown): GeminiReservationAnalysisResult => {
@@ -94,9 +149,9 @@ const normalizeAnalysis = (value: unknown): GeminiReservationAnalysisResult => {
         typeof candidate.gymName === 'string' && candidate.gymName.length > 0
           ? candidate.gymName
           : null,
-      slots: normalizeSlotNames(
+      slots: normalizeSlotDetails(
         candidate.slots && typeof candidate.slots === 'object'
-          ? (candidate.slots as Partial<Record<string, string[]>>)
+          ? (candidate.slots as Partial<Record<string, unknown>>)
           : {},
       ),
     };
@@ -198,4 +253,3 @@ export const analyzeReservationImage = async ({
 
   return normalized;
 };
-

@@ -24,6 +24,8 @@ export type ReservationSlotEntry = {
   name: string;
   source: ReservationSource;
   strike: boolean;
+  startTime: string | null;
+  endTime: string | null;
 };
 
 export type ReservationSlots = Record<ReservationSlotId, ReservationSlotEntry[]>;
@@ -63,6 +65,9 @@ const reservationRangeQuery = (
     where('date', '<=', endDate),
   ) as Query<ReservationDay>;
 
+const normalizeTime = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
 const normalizeSlotEntries = (
   entries: ReservationSlotEntry[] | undefined,
 ): ReservationSlotEntry[] =>
@@ -70,6 +75,8 @@ const normalizeSlotEntries = (
     ? entries.map((entry) => ({
         ...entry,
         strike: entry.strike ?? false,
+        startTime: normalizeTime(entry.startTime),
+        endTime: normalizeTime(entry.endTime),
       }))
     : [];
 
@@ -170,4 +177,3 @@ export const updateReservationDay = async (
 
   await setDoc(reservationDoc(id), payload, { merge: true });
 };
-

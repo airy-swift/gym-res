@@ -79,7 +79,7 @@ const SLOT_PT_PARAM_MAP: Record<
   ReservationSlotId,
   { key: string; value: string }
 > = {
-  morning: { key: 'pt[0]', value: '0' },
+  morning: { key: 'pt[0]', value: '0' }, 
   afternoon: { key: 'pt[0]', value: '1' },
   night: { key: 'pt[0]', value: '2' },
 };
@@ -100,6 +100,36 @@ const getReservationBackgroundClass = (count: number): string => {
 const sanitizeGymName = (gymName: string | null | undefined): string =>
   gymName && gymName.trim().length > 0 ? gymName.trim() : '施設名未設定';
 
+const copyTextToClipboard = async (text: string): Promise<void> => {
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      console.warn('Navigator clipboard write failed, falling back to textarea copy.', error);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return;
+    } catch (error) {
+      console.error('Fallback textarea copy failed.', error);
+    }
+  }
+
+  throw new Error('クリップボードへのコピーに失敗しました。');
+};
+
 type SlotFacilityDetail = {
   reservationId: string;
   gymName: string;
@@ -107,6 +137,8 @@ type SlotFacilityDetail = {
   participantNames: string[];
   totalEntries: number;
   isStruck: boolean;
+  startTime: string | null;
+  endTime: string | null;
 };
 
 type SlotDetail = {
@@ -117,6 +149,7 @@ type SlotDetail = {
 
 type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
+  onRegisterReservationExport?: (handler: (() => Promise<void>) | null) => void;
 };
 
 const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
@@ -132,7 +165,19 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
       const normalizedEntries = entries.map((entry) => ({
         ...entry,
         strike: entry.strike ?? false,
+        startTime:
+          typeof entry.startTime === 'string' && entry.startTime.length > 0
+            ? entry.startTime
+            : null,
+        endTime:
+          typeof entry.endTime === 'string' && entry.endTime.length > 0
+            ? entry.endTime
+            : null,
       }));
+
+      const primaryEntry = normalizedEntries.find(
+        (entry) => entry.startTime || entry.endTime,
+      );
 
       const participantNames = normalizedEntries
         .map((entry) => entry.name?.trim() ?? '')
@@ -148,6 +193,8 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
           normalizedEntries.length > 0
             ? normalizedEntries.every((entry) => entry.strike)
             : false,
+        startTime: primaryEntry?.startTime ?? null,
+        endTime: primaryEntry?.endTime ?? null,
       });
     });
 
@@ -251,7 +298,10 @@ const filterReservationsByParticipant = (
     })
     .filter((reservation): reservation is ReservationDayRecord => reservation !== null);
 
-export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarProps) => {
+export const MonthlyCalendar = ({
+  onRequestScreenshotUpload,
+  onRegisterReservationExport,
+}: MonthlyCalendarProps) => {
   const { participantName } = useReservationParticipants();
   const normalizedParticipantName = useMemo(() => participantName.trim(), [participantName]);
   const canFilterByParticipant = normalizedParticipantName.length > 0;
@@ -555,6 +605,57 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
   };
 
   const monthLabel = formatMonthLabel(displayMonth);
+  const monthPrefix = `${displayMonth.year}-${String(displayMonth.month).padStart(2, '0')}`;
+
+  const copyCurrentMonthReservations = useCallback(async () => {
+    const records = Object.values(reservations)
+      .flat()
+      .filter((reservation) => reservation.date.startsWith(monthPrefix))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const lines: string[] = [];
+
+    records.forEach((reservation) => {
+      const gymName = sanitizeGymName(reservation.gymName);
+      SLOT_ORDER.forEach((slotId) => {
+        const slotEntries = reservation.slots?.[slotId] ?? [];
+        const activeEntry = slotEntries.find((entry) => !entry.strike);
+        if (!activeEntry) {
+          return;
+        }
+        const slotLabel = SLOT_LABELS[slotId];
+        const timeText = activeEntry.startTime && activeEntry.endTime
+          ? `${activeEntry.startTime}~${activeEntry.endTime}`
+          : activeEntry.startTime
+          ? `${activeEntry.startTime}~`
+          : activeEntry.endTime
+          ? `~${activeEntry.endTime}`
+          : '';
+        const parts = [reservation.date, gymName, slotLabel];
+        if (timeText) {
+          parts.push(timeText);
+        }
+        lines.push(parts.join(' '));
+      });
+    });
+
+    const exportText = lines.length > 0 ? lines.join('\n') : '対象データなし';
+
+    await copyTextToClipboard(exportText);
+
+    return exportText;
+  }, [monthPrefix, reservations]);
+
+  useEffect(() => {
+    if (!onRegisterReservationExport) {
+      return;
+    }
+    onRegisterReservationExport(copyCurrentMonthReservations);
+    return () => {
+      onRegisterReservationExport(null);
+    };
+  }, [copyCurrentMonthReservations, onRegisterReservationExport]);
+
   const filterButtonClassName = [
     'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2',
     showOwnReservationsOnly
@@ -920,6 +1021,14 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                               facility.participantNames.length > 0
                                 ? `（${facility.participantNames.join('、')}）`
                                 : '（予約者名未設定）';
+                            const timeRangeLabel =
+                              facility.startTime && facility.endTime
+                                ? `${facility.startTime}~${facility.endTime}`
+                                : facility.startTime
+                                ? `${facility.startTime}~`
+                                : facility.endTime
+                                ? `~${facility.endTime}`
+                                : null;
                             const facilityTextClass = facility.isStruck
                               ? 'break-words text-zinc-400 line-through decoration-zinc-400'
                               : 'break-words text-zinc-700';
@@ -942,6 +1051,7 @@ export const MonthlyCalendar = ({ onRequestScreenshotUpload }: MonthlyCalendarPr
                                   />
                                   <span className={facilityTextClass}>
                                     {`${facility.gymName}${participantLabel}`}
+                                    {timeRangeLabel ? ` ${timeRangeLabel}` : ''}
                                   </span>
                                 </button>
                               </li>
