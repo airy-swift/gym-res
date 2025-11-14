@@ -613,8 +613,6 @@ export const MonthlyCalendar = ({
   const monthLabel = formatMonthLabel(displayMonth);
   const monthPrefix = `${displayMonth.year}-${String(displayMonth.month).padStart(2, '0')}`;
   const effectiveShowOwnReservationsOnly = canFilterByParticipant && showOwnReservationsOnly;
-  const effectiveShowOwnReservationsOnly =
-    canFilterByParticipant && showOwnReservationsOnly;
 
   const copyCurrentMonthReservations = useCallback(async () => {
     const records = Object.values(reservations)
