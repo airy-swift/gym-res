@@ -32,6 +32,16 @@ import {
   type ReservationSlots,
 } from '@/lib/firebase';
 
+export type ReservationExportEntry = {
+  id: string;
+  text: string;
+};
+
+export type ReservationExportData = {
+  entries: ReservationExportEntry[];
+  combinedText: string;
+};
+
 type CalendarDay = {
   date: SimpleDate;
   key: string;
@@ -153,36 +163,6 @@ const formatTimeRange = (
   return `${start}〜${end}`;
 };
 
-const copyTextToClipboard = async (text: string): Promise<void> => {
-  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch (error) {
-      console.warn('Navigator clipboard write failed, falling back to textarea copy.', error);
-    }
-  }
-
-  if (typeof document !== 'undefined') {
-    try {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-      return;
-    } catch (error) {
-      console.error('Fallback textarea copy failed.', error);
-    }
-  }
-
-  throw new Error('クリップボードへのコピーに失敗しました。');
-};
-
 type SlotFacilityDetail = {
   reservationId: string;
   gymName: string;
@@ -202,7 +182,7 @@ type SlotDetail = {
 
 type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
-  onRegisterReservationExport?: (handler: (() => Promise<string>) | null) => void;
+  onRegisterReservationExport?: (handler: (() => Promise<ReservationExportData>) | null) => void;
 };
 
 const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
@@ -691,13 +671,14 @@ const displayCalendarDays = useMemo(() => {
   const monthPrefix = `${displayMonth.year}-${String(displayMonth.month).padStart(2, '0')}`;
   const effectiveShowOwnReservationsOnly = canFilterByParticipant && showOwnReservationsOnly;
 
-  const copyCurrentMonthReservations = useCallback(async () => {
+  const copyCurrentMonthReservations = useCallback(async (): Promise<ReservationExportData> => {
     const records = Object.values(reservations)
       .flat()
       .filter((reservation) => reservation.date.startsWith(monthPrefix))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    const lines: string[] = [];
+    const entries: ReservationExportEntry[] = [];
+    let counter = 0;
 
     records.forEach((reservation) => {
       const gymName = sanitizeGymName(reservation.gymName);
@@ -729,19 +710,21 @@ const displayCalendarDays = useMemo(() => {
           }
 
           const timeSegment = formatTimeRange(entry.startTime, entry.endTime);
-          const line = timeSegment
+          const text = timeSegment
             ? `　${monthNumeric}月${dayNumeric}日（${weekdayLabel}）${timeSegment}\n　　@${gymName}`
             : `　${monthNumeric}月${dayNumeric}日（${weekdayLabel}）\n　　@${gymName}`;
-          lines.push(line);
+          entries.push({
+            id: `${reservation.id}-${slotId}-${counter++}`,
+            text,
+          });
         });
       });
     });
 
-    const exportText = lines.length > 0 ? lines.join('\n') : '対象データなし';
+    const combinedText =
+      entries.length > 0 ? entries.map((entry) => entry.text).join('\n\n') : '対象データなし';
 
-    await copyTextToClipboard(exportText);
-
-    return exportText;
+    return { entries, combinedText };
   }, [monthPrefix, reservations]);
 
   useEffect(() => {
