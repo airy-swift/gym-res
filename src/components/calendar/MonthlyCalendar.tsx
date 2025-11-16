@@ -67,13 +67,28 @@ const FACILITY_SEARCH_DEFAULT_PARAMS: Array<[string, string]> = [
 ];
 
 const SCHOOL_SEARCH_DEFAULT_PARAMS: Array<[string, string]> = [
-  ['u[0]', '28'],
-  ['f[0]', '011002_0004'],
-  ['f[1]', '011002_0005'],
-  ['f[2]', '011002_0010'],
-  ['f[3]', '011002_0020'],
-  ['f[4]', '011002_0030'],
-  ['f[5]', '011002_0040'],
+  ['u[0]', '76'],
+  ['f[0]', '011002_0202'],
+  ['f[1]', '011002_0214'],
+  ['f[2]', '011002_0217'],
+  ['f[3]', '011002_0285'],
+  ['f[4]', '011002_0292'],
+  ['f[5]', '011002_0302'],
+  ['f[6]', '011002_0305'],
+  ['f[7]', '011002_0330'],
+  ['f[8]', '011002_0337'],
+  ['f[9]', '011002_0338'],
+  ['f[10]', '011002_0340'],
+  ['f[11]', '011002_0341'],
+  ['f[12]', '011002_0342'],
+  ['f[13]', '011002_0344'],
+  ['f[14]', '011002_0361'],
+  ['f[15]', '011002_0366'],
+  ['f[16]', '011002_0371'],
+  ['f[17]', '011002_0391'],
+  ['f[18]', '011002_0230'],
+  ['f[19]', '011002_0242'],
+  ['f[20]', '011002_0231'],
 ];
 
 const SLOT_PT_PARAM_MAP: Record<
@@ -698,7 +713,7 @@ export const MonthlyCalendar = ({
       <div className="flex flex-col gap-6 border border-zinc-200 bg-white p-0 shadow-sm sm:rounded-2xl sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-black sm:text-3xl sm:text-zinc-900">
               {monthLabel}
             </h1>
           </div>

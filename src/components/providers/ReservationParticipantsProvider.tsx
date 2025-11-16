@@ -39,6 +39,19 @@ export const ReservationParticipantsProvider = ({
   const [participantName, setParticipantName] = useState<string>('');
   const [isLoaded, setIsLoaded] = useState(false);
   const [editorState, setEditorState] = useState<EditorState>({ isOpen: false, draft: '' });
+  const [showPreEditWarning, setShowPreEditWarning] = useState(false);
+
+  const confirmOpenEditor = useCallback(() => {
+    setShowPreEditWarning(true);
+  }, []);
+
+  const proceedOpenEditor = useCallback(() => {
+    setShowPreEditWarning(false);
+    setEditorState({
+      isOpen: true,
+      draft: participantName,
+    });
+  }, [participantName]);
 
   const persistParticipant = useCallback((name: string) => {
     setParticipantName(name);
@@ -49,12 +62,7 @@ export const ReservationParticipantsProvider = ({
     }
   }, []);
 
-  const openEditor = useCallback(() => {
-    setEditorState({
-      isOpen: true,
-      draft: participantName,
-    });
-  }, [participantName]);
+  const openEditor = confirmOpenEditor;
 
   const closeEditor = useCallback(() => {
     if (normalizeName(participantName).length === 0) {
@@ -130,6 +138,40 @@ export const ReservationParticipantsProvider = ({
   return (
     <ReservationParticipantsContext.Provider value={contextValue}>
       {children}
+
+      {showPreEditWarning ? (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold text-zinc-900">表示名の注意事項</h2>
+              <p className="text-sm text-zinc-600">
+                表示名は申請者情報として扱われるため、認証情報と同様に基本的には変更しないでください。
+                やむを得ない理由がある場合のみ編集してください。
+              </p>
+            </div>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setShowPreEditWarning(false)}
+                className="rounded-full border border-zinc-200 px-4 py-2 text-sm text-zinc-600 transition hover:border-zinc-300 hover:text-zinc-800"
+              >
+                閉じる
+              </button>
+              <button
+                type="button"
+                onClick={proceedOpenEditor}
+                className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+              >
+                理由があるため編集する
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editorState.isOpen ? (
         <div

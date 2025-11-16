@@ -102,8 +102,8 @@ const AppContent = () => {
   );
 
   return (
-    <div className="min-h-screen bg-zinc-50 py-0 sm:py-12">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-0 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-zinc-50 pt-2 pb-0 sm:py-12">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-2 sm:px-6 lg:px-8">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col gap-2">
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">
@@ -144,10 +144,12 @@ const AppContent = () => {
         </header>
 
         <ScreenshotUpload onRegisterOpenDialog={handleRegisterOpenDialog} />
-        <MonthlyCalendar
-          onRequestScreenshotUpload={openScreenshotUpload ?? undefined}
-          onRegisterReservationExport={handleRegisterReservationExport}
-        />
+        <div className="-mx-2 sm:mx-0">
+          <MonthlyCalendar
+            onRequestScreenshotUpload={openScreenshotUpload ?? undefined}
+            onRegisterReservationExport={handleRegisterReservationExport}
+          />
+        </div>
       </div>
 
       {copyStatus !== 'idle' ? (
