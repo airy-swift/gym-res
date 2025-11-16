@@ -722,7 +722,7 @@ const displayCalendarDays = useMemo(() => {
     });
 
     const combinedText =
-      entries.length > 0 ? entries.map((entry) => entry.text).join('\n\n') : '対象データなし';
+      entries.length > 0 ? entries.map((entry) => entry.text).join('\n') : '対象データなし';
 
     return { entries, combinedText };
   }, [monthPrefix, reservations]);
