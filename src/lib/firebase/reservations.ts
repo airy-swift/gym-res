@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -176,4 +177,8 @@ export const updateReservationDay = async (
   };
 
   await setDoc(reservationDoc(id), payload, { merge: true });
+};
+
+export const deleteReservationDay = async (id: string): Promise<void> => {
+  await deleteDoc(reservationDoc(id));
 };

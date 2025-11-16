@@ -25,6 +25,7 @@ import {
   listReservationDaysInRange,
   subscribeReservationDaysInRange,
   updateReservationDay,
+  deleteReservationDay,
   type ReservationDayRecord,
   type ReservationSlotEntry,
   type ReservationSlotId,
@@ -431,10 +432,10 @@ export const MonthlyCalendar = ({
     [calendar, reservations],
   );
 
-  const displayCalendarDays = useMemo(() => {
-    if (!canFilterByParticipant || !showOwnReservationsOnly) {
-      return calendarDays;
-    }
+const displayCalendarDays = useMemo(() => {
+  if (!canFilterByParticipant || !showOwnReservationsOnly) {
+    return calendarDays;
+  }
 
     return calendarDays.map((day) => ({
       ...day,
@@ -482,6 +483,67 @@ export const MonthlyCalendar = ({
   const selectedSlotDetails = selectedDay
     ? buildSlotDetails(selectedDay.reservations)
     : [];
+
+  const handleDeleteReservation = useCallback(
+    async (facility: SlotFacilityDetail) => {
+      if (!selectedDay) {
+        return;
+      }
+
+      const cautionMessage =
+        '予約情報は基本的に消さず、タップで横線を引く運用を推奨しています。本当に削除しますか？';
+      if (!window.confirm(cautionMessage)) {
+        return;
+      }
+      if (!window.confirm('重複や実験などの理由で、この予約を完全に削除してもよろしいですか？')) {
+        return;
+      }
+
+      const targetReservation = selectedDay.reservations.find(
+        (reservation) => reservation.id === facility.reservationId,
+      );
+
+      if (!targetReservation) {
+        return;
+      }
+
+      setReservations((prev) => {
+        const dayReservations = prev[targetReservation.date];
+        if (!dayReservations) {
+          return prev;
+        }
+
+        const updatedDayReservations = dayReservations.filter(
+          (reservation) => reservation.id !== targetReservation.id,
+        );
+
+        const next = { ...prev };
+        if (updatedDayReservations.length > 0) {
+          next[targetReservation.date] = updatedDayReservations;
+        } else {
+          delete next[targetReservation.date];
+        }
+        return next;
+      });
+
+      setSelectedDayKey((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        if (selectedDay && prev === selectedDay.key && selectedDay.reservations.length <= 1) {
+          return null;
+        }
+        return prev;
+      });
+
+      try {
+        await deleteReservationDay(targetReservation.id);
+      } catch (error) {
+        console.error('Failed to delete reservation', error);
+      }
+    },
+    [selectedDay],
+  );
 
   const buildReservationSearchUrl = useCallback(
     (
@@ -1068,10 +1130,15 @@ export const MonthlyCalendar = ({
                             const facilityTextClass = facility.isStruck
                               ? 'break-words text-zinc-400 line-through decoration-zinc-400'
                               : 'break-words text-zinc-700';
+                            const canDeleteReservation =
+                              normalizedParticipantName.length > 0 &&
+                              facility.participantNames.some(
+                                (name) => name.trim() === normalizedParticipantName,
+                              );
                             return (
                               <li
                                 key={`${facility.reservationId}-${detail.slotId}-${index}`}
-                                className="flex items-start"
+                                className="flex items-start gap-2"
                               >
                                 <button
                                   type="button"
@@ -1090,6 +1157,32 @@ export const MonthlyCalendar = ({
                                     {timeRangeLabel ? ` ${timeRangeLabel}` : ''}
                                   </span>
                                 </button>
+                                {canDeleteReservation ? (
+                                  <button
+                                    type="button"
+                                    aria-label="予約を削除"
+                                    className="mt-1 rounded-full p-1 text-zinc-400 transition hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void handleDeleteReservation(facility);
+                                    }}
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="1.5"
+                                      className="h-4 w-4"
+                                      aria-hidden="true"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l6 6M15 9l-6 6" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 7V5h4v2" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 7l1 12h10l1-12" />
+                                    </svg>
+                                  </button>
+                                ) : null}
                               </li>
                             );
                           })}
