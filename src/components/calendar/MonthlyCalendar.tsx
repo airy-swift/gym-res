@@ -977,7 +977,7 @@ const displayCalendarDays = useMemo(() => {
               const backgroundClass = getReservationBackgroundClass(totalActiveEntries);
 
               const cellClass = [
-                'flex min-h-[92px] flex-col gap-2 rounded-lg border border-transparent p-2 text-left text-sm transition sm:min-h-[120px] sm:p-3',
+                'flex min-h-[92px] flex-col gap-1 rounded-lg border border-transparent p-2 text-left max-sm:text-center text-sm transition sm:min-h-[120px] max-sm:p-0.5',
                 backgroundClass,
                 hasFixedEntries ? 'border-emerald-400' : null,
                 'cursor-pointer hover:ring-2 hover:ring-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
@@ -1048,7 +1048,7 @@ const displayCalendarDays = useMemo(() => {
                                   {SLOT_LABELS[detail.slotId]}
                                 </span>
                                 <span
-                                  className="mt-1 block text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:pl-1.5"
+                                  className="mt-1 block text-[9.5px] font-medium text-zinc-600 max-sm:mt-0.5 max-sm:inline max-sm:pl-1.5"
                                   aria-label={labelText}
                                   title={labelText}
                                 >
