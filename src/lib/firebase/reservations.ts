@@ -27,6 +27,7 @@ export type ReservationSlotEntry = {
   strike: boolean;
   startTime: string | null;
   endTime: string | null;
+  fixed?: boolean | null;
 };
 
 export type ReservationSlots = Record<ReservationSlotId, ReservationSlotEntry[]>;
@@ -38,6 +39,7 @@ export type ReservationDay = {
   confirmed: boolean;
   lastUpdatedBy: string | null;
   updatedAt: string;
+  fixed?: boolean | null;
 };
 
 export type ReservationDayRecord = ReservationDay & {
@@ -78,6 +80,7 @@ const normalizeSlotEntries = (
         strike: entry.strike ?? false,
         startTime: normalizeTime(entry.startTime),
         endTime: normalizeTime(entry.endTime),
+        fixed: entry.fixed ?? false,
       }))
     : [];
 
@@ -144,6 +147,7 @@ export const createReservationDay = async ({
   confirmed,
   lastUpdatedBy,
   updatedAt,
+  fixed,
 }: ReservationDayUpdate): Promise<string> => {
   const normalizedSlots = normalizeReservationSlots(slots);
 
@@ -154,6 +158,7 @@ export const createReservationDay = async ({
     confirmed,
     lastUpdatedBy,
     updatedAt: updatedAt ?? new Date().toISOString(),
+    fixed: fixed ?? false,
   };
 
   const id = generateReservationDocumentId();
@@ -163,7 +168,7 @@ export const createReservationDay = async ({
 
 export const updateReservationDay = async (
   id: string,
-  { date, gymName, slots, confirmed, lastUpdatedBy, updatedAt }: ReservationDayUpdate,
+  { date, gymName, slots, confirmed, lastUpdatedBy, updatedAt, fixed }: ReservationDayUpdate,
 ) => {
   const normalizedSlots = normalizeReservationSlots(slots);
 
@@ -174,6 +179,7 @@ export const updateReservationDay = async (
     confirmed,
     lastUpdatedBy,
     updatedAt: updatedAt ?? new Date().toISOString(),
+    fixed: fixed ?? false,
   };
 
   await setDoc(reservationDoc(id), payload, { merge: true });

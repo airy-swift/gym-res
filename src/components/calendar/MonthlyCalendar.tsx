@@ -5,7 +5,6 @@ import {
   useEffect,
   useMemo,
   useState,
-  type MouseEvent as ReactMouseEvent,
   type ReactElement,
 } from 'react';
 
@@ -60,6 +59,8 @@ const SLOT_LABELS: Record<ReservationSlotId, string> = {
 };
 
 const SLOT_ORDER: ReservationSlotId[] = ['morning', 'afternoon', 'night'];
+
+const FIXED_TOGGLE_OWNER_NAME = 'イワハシ';
 
 
 const FACILITY_SEARCH_BASE_URL =
@@ -172,6 +173,7 @@ type SlotFacilityDetail = {
   isStruck: boolean;
   startTime: string | null;
   endTime: string | null;
+  isFixed: boolean;
 };
 
 type SlotDetail = {
@@ -206,6 +208,7 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
           typeof entry.endTime === 'string' && entry.endTime.length > 0
             ? entry.endTime
             : null,
+        fixed: entry.fixed ?? false,
       }));
 
       const primaryEntry = normalizedEntries.find(
@@ -228,6 +231,10 @@ const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] =>
             : false,
         startTime: primaryEntry?.startTime ?? null,
         endTime: primaryEntry?.endTime ?? null,
+        isFixed:
+          normalizedEntries.length > 0
+            ? normalizedEntries.some((entry) => entry.fixed)
+            : false,
       });
     });
 
@@ -338,6 +345,7 @@ export const MonthlyCalendar = ({
   const { participantName } = useReservationParticipants();
   const normalizedParticipantName = useMemo(() => participantName.trim(), [participantName]);
   const canFilterByParticipant = normalizedParticipantName.length > 0;
+  const canToggleFixed = normalizedParticipantName === FIXED_TOGGLE_OWNER_NAME;
   const [showOwnReservationsOnly, setShowOwnReservationsOnly] = useState(false);
   const today = useMemo(() => getTodayInJst(), []);
   const [displayMonth, setDisplayMonth] = useState<SimpleDate>(() => ({
@@ -593,6 +601,72 @@ const displayCalendarDays = useMemo(() => {
     [buildSchoolSearchUrl],
   );
 
+  const handleToggleFacilityFixed = useCallback(
+    async (slotId: ReservationSlotId, facility: SlotFacilityDetail) => {
+      if (!selectedDay || !canToggleFixed) {
+        return;
+      }
+
+      const targetReservation = selectedDay.reservations.find(
+        (reservation) => reservation.id === facility.reservationId,
+      );
+
+      if (!targetReservation) {
+        return;
+      }
+
+      const nextFixed = !facility.isFixed;
+      const updatedSlotEntries = (targetReservation.slots?.[slotId] ?? []).map((entry) => ({
+        ...entry,
+        fixed: nextFixed,
+      }));
+
+      const nextSlots: ReservationSlots = {
+        ...targetReservation.slots,
+        [slotId]: updatedSlotEntries,
+      };
+
+      const aggregatedFixed = SLOT_ORDER.some((reservationSlotId) =>
+        (nextSlots[reservationSlotId] ?? []).some((entry) => entry.fixed),
+      );
+
+      const updatedReservation: ReservationDayRecord = {
+        ...targetReservation,
+        slots: nextSlots,
+        fixed: aggregatedFixed,
+      };
+
+      setReservations((prev) => {
+        const dayReservations = prev[updatedReservation.date];
+        if (!dayReservations) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+          [updatedReservation.date]: dayReservations.map((reservation) =>
+            reservation.id === updatedReservation.id ? updatedReservation : reservation,
+          ),
+        };
+      });
+
+      try {
+        await updateReservationDay(updatedReservation.id, {
+          date: updatedReservation.date,
+          gymName: updatedReservation.gymName,
+          slots: updatedReservation.slots,
+          confirmed: updatedReservation.confirmed,
+          lastUpdatedBy: updatedReservation.lastUpdatedBy,
+          fixed: updatedReservation.fixed ?? false,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (error) {
+        console.error('Failed to update fixed status', error);
+      }
+    },
+    [canToggleFixed, selectedDay],
+  );
+
   const handleToggleFacilityStrike = useCallback(
     async (slotId: ReservationSlotId, facility: SlotFacilityDetail) => {
       if (!selectedDay) {
@@ -644,6 +718,7 @@ const displayCalendarDays = useMemo(() => {
           slots: updatedReservation.slots,
           confirmed: updatedReservation.confirmed,
           lastUpdatedBy: updatedReservation.lastUpdatedBy,
+          fixed: updatedReservation.fixed ?? false,
           updatedAt: new Date().toISOString(),
         });
       } catch (error) {
@@ -883,12 +958,18 @@ const displayCalendarDays = useMemo(() => {
                 detail.facilities.some((facility) => !facility.isStruck),
               );
               const hasDisplayEntries = hasActiveFacilities || totalStruckFacilities > 0;
+              const hasFixedEntries =
+                slotDetails.some((detail) =>
+                  detail.facilities.some((facility) => facility.isFixed),
+                ) ||
+                reservationsForDay.some((reservation) => Boolean(reservation.fixed));
 
               const backgroundClass = getReservationBackgroundClass(totalActiveEntries);
 
               const cellClass = [
-                'flex min-h-[92px] flex-col gap-2 rounded-lg p-2 text-left text-sm transition sm:min-h-[120px] sm:p-3',
+                'flex min-h-[92px] flex-col gap-2 rounded-lg border border-transparent p-2 text-left text-sm transition sm:min-h-[120px] sm:p-3',
                 backgroundClass,
+                hasFixedEntries ? 'border-emerald-400' : null,
                 'cursor-pointer hover:ring-2 hover:ring-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
               ]
                 .filter(Boolean)
@@ -1118,28 +1199,112 @@ const displayCalendarDays = useMemo(() => {
                               facility.participantNames.some(
                                 (name) => name.trim() === normalizedParticipantName,
                               );
+                            const toggleFixed = () => {
+                              void handleToggleFacilityFixed(detail.slotId, facility);
+                            };
+                            const leadingIndicator = canToggleFixed
+                              ? (
+                                  <span
+                                    role="checkbox"
+                                    aria-checked={facility.isFixed}
+                                    tabIndex={0}
+                                    aria-label={
+                                      facility.isFixed ? '固定を解除' : '固定済みにする'
+                                    }
+                                    title={
+                                      facility.isFixed ? '固定を解除' : '固定済みにする'
+                                    }
+                                    className={[
+                                      'mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                                      facility.isFixed
+                                        ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
+                                        : 'border-zinc-300 bg-white text-transparent hover:border-emerald-300',
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' ')}
+                                    onClick={(event) => {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      toggleFixed();
+                                    }}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'Enter' || event.key === ' ') {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        toggleFixed();
+                                      }
+                                    }}
+                                  >
+                                    {facility.isFixed ? (
+                                      <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2.5"
+                                        className="h-3 w-3"
+                                        aria-hidden="true"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          d="M6 12l3 3 9-9"
+                                        />
+                                      </svg>
+                                    ) : null}
+                                  </span>
+                                )
+                              : facility.isFixed
+                              ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className="mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      className="h-3 w-3"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 12l3 3 9-9" />
+                                    </svg>
+                                  </span>
+                                )
+                              : (
+                                  <span
+                                    aria-hidden="true"
+                                    className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-400"
+                                  />
+                                );
                             return (
                               <li
                                 key={`${facility.reservationId}-${detail.slotId}-${index}`}
                                 className="flex items-start gap-2"
                               >
-                                <button
-                                  type="button"
-                                  onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={(event) => {
                                     event.stopPropagation();
                                     void handleToggleFacilityStrike(detail.slotId, facility);
                                   }}
-                                  className="flex w-full items-start gap-2 rounded-md px-2 py-1 text-left transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Enter' || event.key === ' ') {
+                                      event.preventDefault();
+                                      event.stopPropagation();
+                                      void handleToggleFacilityStrike(detail.slotId, facility);
+                                    }
+                                  }}
+                                  className="flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1 text-left transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                 >
-                                  <span
-                                    aria-hidden="true"
-                                    className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-400"
-                                  />
+                                  {leadingIndicator}
                                   <span className={facilityTextClass}>
                                     {`${facility.gymName}${participantLabel}`}
                                     {timeRangeLabel ? ` ${timeRangeLabel}` : ''}
                                   </span>
-                                </button>
+                                </div>
                                 {canDeleteReservation ? (
                                   <button
                                     type="button"
