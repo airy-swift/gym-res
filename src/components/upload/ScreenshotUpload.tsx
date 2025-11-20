@@ -239,6 +239,9 @@ export const ScreenshotUpload = ({
           map.set(slotKey, entrySet);
         }
         slotEntries.forEach((entry: ReservationSlotEntry) => {
+          if (entry.strike) {
+            return;
+          }
           const normalizedName = normalizeReservationString(entry.name);
           const normalizedStart = normalizeReservationTime(entry.startTime);
           const normalizedEnd = normalizeReservationTime(entry.endTime);
@@ -468,22 +471,27 @@ export const ScreenshotUpload = ({
         const slotKey = buildSlotDuplicateKey(normalizedDate, normalizedGymName, entry.slot);
         const duplicateEntries = duplicateEntryIndex.get(slotKey);
 
-        base[entry.slot] = sanitizedNames.map((name) => {
+        const entriesForSlot = sanitizedNames.reduce<ReservationSlotEntry[]>((acc, name) => {
           const entryDuplicateKey = buildEntryDuplicateKey(
             name,
             normalizedStart || null,
             normalizedEnd || null,
           );
           const isDuplicate = duplicateEntries?.has(entryDuplicateKey) ?? false;
-
-          return {
+          if (isDuplicate) {
+            return acc;
+          }
+          acc.push({
             name,
             source: hasAiNames ? 'ai' : 'manual',
-            strike: isDuplicate,
+            strike: false,
             startTime: normalizedStart || null,
             endTime: normalizedEnd || null,
-          };
-        });
+          });
+          return acc;
+        }, []);
+
+        base[entry.slot] = entriesForSlot;
       });
 
       return base;
