@@ -1048,12 +1048,12 @@ const displayCalendarDays = useMemo(() => {
                                   {SLOT_LABELS[detail.slotId]}
                                 </span>
                                 <span
-                                  className="mt-1 block text-[9.5px] font-medium text-zinc-600 max-sm:mt-0.5 max-sm:inline max-sm:pl-1.5"
+                                  className="mt-1 block lg:text-[11px] max-sm:text-[9px] font-medium text-zinc-600 max-sm:mt-0.5 max-sm:inline max-sm:pl-1.5"
                                   aria-label={labelText}
                                   title={labelText}
                                 >
                                   {facilityNames.map((name, index) => (
-                                    <span key={`${day.key}-${detail.slotId}-name-${index}`} className="block font-bold">
+                                    <span key={`${day.key}-${detail.slotId}-name-${index}`} className="block font-medium">
                                       {name}
                                     </span>
                                   ))}
