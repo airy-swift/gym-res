@@ -59,6 +59,7 @@ const AppContent = () => {
     (() => Promise<ReservationExportData>) | null
   >(null);
   const [allReservations, setAllReservations] = useState<ReservationDayRecord[]>([]);
+  const [isCopyOwnReservations, setIsCopyOwnReservations] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [lastCopiedText, setLastCopiedText] = useState<string>('');
   const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,7 +191,7 @@ const AppContent = () => {
                     d="M16 7V5a2 2 0 00-2-2H10a2 2 0 00-2 2v2"
                   />
                 </svg>
-                <span>予約情報をコピー</span>
+                <span>{isCopyOwnReservations ? '自分の予約情報をコピー' : '予約情報をコピー'}</span>
               </button>
             </div>
           </div>
@@ -206,6 +207,7 @@ const AppContent = () => {
             onRequestScreenshotUpload={openScreenshotUpload ?? undefined}
             onRegisterReservationExport={handleRegisterReservationExport}
             onReservationsChange={setAllReservations}
+            onCopyFilterChange={setIsCopyOwnReservations}
           />
         </div>
 

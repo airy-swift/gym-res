@@ -186,6 +186,7 @@ type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
   onRegisterReservationExport?: (handler: (() => Promise<ReservationExportData>) | null) => void;
   onReservationsChange?: (reservations: ReservationDayRecord[]) => void;
+  onCopyFilterChange?: (isOwnOnly: boolean) => void;
 };
 
 const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
@@ -343,6 +344,7 @@ export const MonthlyCalendar = ({
   onRequestScreenshotUpload,
   onRegisterReservationExport,
   onReservationsChange,
+  onCopyFilterChange,
 }: MonthlyCalendarProps) => {
   const { participantName } = useReservationParticipants();
   const normalizedParticipantName = useMemo(() => participantName.trim(), [participantName]);
@@ -429,6 +431,13 @@ export const MonthlyCalendar = ({
     const flattenedReservations = Object.values(reservations).flat();
     onReservationsChange(flattenedReservations);
   }, [onReservationsChange, reservations]);
+
+  useEffect(() => {
+    if (!onCopyFilterChange) {
+      return;
+    }
+    onCopyFilterChange(canFilterByParticipant && showOwnReservationsOnly);
+  }, [canFilterByParticipant, onCopyFilterChange, showOwnReservationsOnly]);
 
 const displayCalendarDays = useMemo(() => {
   if (!canFilterByParticipant || !showOwnReservationsOnly) {
@@ -757,10 +766,18 @@ const displayCalendarDays = useMemo(() => {
   const effectiveShowOwnReservationsOnly = canFilterByParticipant && showOwnReservationsOnly;
 
   const copyCurrentMonthReservations = useCallback(async (): Promise<ReservationExportData> => {
-    const records = Object.values(reservations)
+    const monthlyRecords = Object.values(reservations)
       .flat()
       .filter((reservation) => reservation.date.startsWith(monthPrefix))
       .sort((a, b) => a.date.localeCompare(b.date));
+
+    const records = effectiveShowOwnReservationsOnly
+      ? monthlyRecords
+          .map((reservation) =>
+            filterReservationsByParticipant([reservation], normalizedParticipantName),
+          )
+          .flat()
+      : monthlyRecords;
 
     const entries: ReservationExportEntry[] = [];
     let counter = 0;
@@ -810,7 +827,7 @@ const displayCalendarDays = useMemo(() => {
       entries.length > 0 ? entries.map((entry) => entry.text).join('\n') : '対象データなし';
 
     return { entries, combinedText };
-  }, [monthPrefix, reservations]);
+  }, [effectiveShowOwnReservationsOnly, monthPrefix, normalizedParticipantName, reservations]);
 
   useEffect(() => {
     if (!onRegisterReservationExport) {
