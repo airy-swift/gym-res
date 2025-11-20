@@ -65,6 +65,7 @@ const TIME_PRESET_OPTIONS: TimePreset[] = [
   { id: 'night-1', label: '18:00~21:00', startTime: '18:00', endTime: '21:00', slot: 'night' },
   { id: 'night-2', label: '19:15~21:45', startTime: '19:15', endTime: '21:45', slot: 'night' },
   { id: 'night-3', label: '17:45~21:45', startTime: '17:45', endTime: '21:45', slot: 'night' },
+  { id: 'night-4', label: '18:15~21:45', startTime: '18:15', endTime: '21:45', slot: 'night' },
 ]
 
 const getPresetIdForEntry = (entry: ReviewReservationEntry): string => {

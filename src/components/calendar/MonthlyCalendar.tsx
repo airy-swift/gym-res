@@ -1215,7 +1215,7 @@ const displayCalendarDays = useMemo(() => {
                                       facility.isFixed ? '固定を解除' : '固定済みにする'
                                     }
                                     className={[
-                                      'mt-1 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
+                                      'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded border text-[10px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white',
                                       facility.isFixed
                                         ? 'border-emerald-500 bg-emerald-50 text-emerald-600'
                                         : 'border-zinc-300 bg-white text-transparent hover:border-emerald-300',
@@ -1258,7 +1258,7 @@ const displayCalendarDays = useMemo(() => {
                               ? (
                                   <span
                                     aria-hidden="true"
-                                    className="mt-1 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"
+                                    className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600"
                                   >
                                     <svg
                                       xmlns="http://www.w3.org/2000/svg"
@@ -1275,7 +1275,7 @@ const displayCalendarDays = useMemo(() => {
                               : (
                                   <span
                                     aria-hidden="true"
-                                    className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-400"
+                                    className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-zinc-400"
                                   />
                                 );
                             return (
