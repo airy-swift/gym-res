@@ -1027,37 +1027,41 @@ const displayCalendarDays = useMemo(() => {
                             const activeFacilities = detail.facilities.filter(
                               (facility) => !facility.isStruck,
                             );
+                            if (activeFacilities.length === 0) {
+                              return;
+                            }
 
-                            activeFacilities.forEach((facility, facilityIndex) => {
-                              const facilityLabel =
-                                facility.gymName && facility.gymName.length > 0
-                                  ? facility.gymName
-                                  : '施設名未設定';
-                              const participantsLabel =
-                                facility.participantNames.length > 0
-                                  ? `（${facility.participantNames.join('、')}）`
-                                  : '';
+                            const facilityNames = activeFacilities.map((facility) =>
+                              facility.gymName && facility.gymName.length > 0
+                                ? facility.gymName
+                                : '施設名未設定',
+                            );
 
-                              items.push(
-                                <li
-                                  key={`${day.key}-${detail.slotId}-${facility.reservationId}-${facilityIndex}`}
-                                  className="text-zinc-600"
+                            const labelText = facilityNames.join('、');
+
+                            items.push(
+                              <li
+                                key={`${day.key}-${detail.slotId}`}
+                                className="text-zinc-600"
+                              >
+                                <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
+                                  {SLOT_LABELS[detail.slotId]}
+                                </span>
+                                <span
+                                  className="mt-1 block text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:pl-1.5"
+                                  aria-label={labelText}
+                                  title={labelText}
                                 >
-                                  <span className="rounded bg-zinc-100 px-1 text-[9px] font-medium text-zinc-500 sm:text-[10px]">
-                                    {SLOT_LABELS[detail.slotId]}
-                                  </span>
-                                  <span
-                                    className="mt-1 block text-[10px] font-medium text-zinc-600 sm:mt-0 sm:inline sm:pl-1.5 sm:whitespace-nowrap line-clamp-1"
-                                    aria-label={`${facilityLabel}${participantsLabel}`}
-                                    title={`${facilityLabel}${participantsLabel}`}
-                                  >
-                                    {facilityLabel}
-                                  </span>
-                                </li>,
-                              );
-                            });
+                                  {facilityNames.map((name, index) => (
+                                    <span key={`${day.key}-${detail.slotId}-name-${index}`} className="block font-bold">
+                                      {name}
+                                    </span>
+                                  ))}
+                                </span>
+                              </li>,
+                            );
                           });
-
+                        
                           if (totalStruckFacilities > 0) {
                             items.push(
                               <li
