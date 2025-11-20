@@ -11,6 +11,7 @@ import {
   ReservationParticipantsProvider,
   useReservationParticipants,
 } from '@/components/providers/ReservationParticipantsProvider';
+import { type ReservationDayRecord } from '@/lib/firebase';
 
 const EditParticipantsButton = () => {
   const { participants, openEditor } = useReservationParticipants();
@@ -57,6 +58,7 @@ const AppContent = () => {
   const [copyReservationsHandler, setCopyReservationsHandler] = useState<
     (() => Promise<ReservationExportData>) | null
   >(null);
+  const [allReservations, setAllReservations] = useState<ReservationDayRecord[]>([]);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [lastCopiedText, setLastCopiedText] = useState<string>('');
   const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -160,6 +162,7 @@ const AppContent = () => {
             <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl">
               体育館予約共有カレンダー
             </h1>
+            <p className="text-sm text-zinc-500">スクショは重複で登録してもシステムがなんとかしてくれるようになりました。きっと。多分。</p>
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
@@ -194,13 +197,17 @@ const AppContent = () => {
           <EditParticipantsButton />
         </header>
 
-        <ScreenshotUpload onRegisterOpenDialog={handleRegisterOpenDialog} />
-        <div className="-mx-2 sm:mx-0">
-        <MonthlyCalendar
-          onRequestScreenshotUpload={openScreenshotUpload ?? undefined}
-          onRegisterReservationExport={handleRegisterReservationExport}
+        <ScreenshotUpload
+          onRegisterOpenDialog={handleRegisterOpenDialog}
+          existingReservations={allReservations}
         />
-      </div>
+        <div className="-mx-2 sm:mx-0">
+          <MonthlyCalendar
+            onRequestScreenshotUpload={openScreenshotUpload ?? undefined}
+            onRegisterReservationExport={handleRegisterReservationExport}
+            onReservationsChange={setAllReservations}
+          />
+        </div>
 
       {isCopyDialogOpen ? (
         <div

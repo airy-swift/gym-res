@@ -11,6 +11,8 @@ import {
 import { useReservationParticipants } from '@/components/providers/ReservationParticipantsProvider';
 import {
   createReservationDay,
+  type ReservationDayRecord,
+  type ReservationSlotEntry,
   type ReservationSlotId,
   type ReservationSlots,
 } from '@/lib/firebase';
@@ -113,6 +115,29 @@ const createReservationEntryId = () =>
     ? crypto.randomUUID()
     : `entry-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
+const normalizeReservationString = (value: string | null | undefined): string =>
+  typeof value === 'string' ? value.trim() : '';
+
+const normalizeReservationTime = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const buildSlotDuplicateKey = (
+  date: string,
+  gymName: string,
+  slot: ReservationSlotId,
+): string => `${date}__${gymName}__${slot}`;
+
+const buildEntryDuplicateKey = (
+  name: string,
+  startTime: string | null,
+  endTime: string | null,
+): string => `${name}__${startTime ?? ''}__${endTime ?? ''}`;
+
 const toReviewTime = (value: string | null | undefined): string =>
   value && value.trim().length > 0 ? value.trim() : '';
 
@@ -177,9 +202,13 @@ const validateImageFile = (file: File | undefined): File => {
 
 type ScreenshotUploadProps = {
   onRegisterOpenDialog?: (open: (() => void) | null) => void;
+  existingReservations?: ReservationDayRecord[];
 };
 
-export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps) => {
+export const ScreenshotUpload = ({
+  onRegisterOpenDialog,
+  existingReservations = [],
+}: ScreenshotUploadProps) => {
   const { participants, participantName, isReady: areParticipantsReady, openEditor } =
     useReservationParticipants();
   const [isDragging, setIsDragging] = useState(false);
@@ -190,6 +219,36 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
+
+  const duplicateEntryIndex = useMemo<Map<string, Set<string>>>(() => {
+    const map = new Map<string, Set<string>>();
+
+    existingReservations.forEach((reservation) => {
+      const normalizedDate = normalizeReservationString(reservation.date);
+      const normalizedGymName = normalizeReservationString(reservation.gymName);
+
+      SLOT_ORDER.forEach((slotId) => {
+        const slotEntries = reservation.slots?.[slotId] ?? [];
+        if (!slotEntries.length) {
+          return;
+        }
+        const slotKey = buildSlotDuplicateKey(normalizedDate, normalizedGymName, slotId);
+        let entrySet = map.get(slotKey);
+        if (!entrySet) {
+          entrySet = new Set<string>();
+          map.set(slotKey, entrySet);
+        }
+        slotEntries.forEach((entry: ReservationSlotEntry) => {
+          const normalizedName = normalizeReservationString(entry.name);
+          const normalizedStart = normalizeReservationTime(entry.startTime);
+          const normalizedEnd = normalizeReservationTime(entry.endTime);
+          entrySet!.add(buildEntryDuplicateKey(normalizedName, normalizedStart, normalizedEnd));
+        });
+      });
+    });
+
+    return map;
+  }, [existingReservations]);
 
   const resetState = useCallback(() => {
     setReviewState(initialReviewState());
@@ -394,6 +453,9 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
         night: [],
       };
 
+      const normalizedDate = normalizeReservationString(reservation.date);
+      const normalizedGymName = normalizeReservationString(reservation.gymName);
+
       reservation.entries.forEach((entry) => {
         const hasAiNames = entry.names.length > 0;
         const targetNames = hasAiNames ? entry.names : participants;
@@ -403,19 +465,30 @@ export const ScreenshotUpload = ({ onRegisterOpenDialog }: ScreenshotUploadProps
 
         const normalizedStart = toReviewTime(entry.startTime);
         const normalizedEnd = toReviewTime(entry.endTime);
+        const slotKey = buildSlotDuplicateKey(normalizedDate, normalizedGymName, entry.slot);
+        const duplicateEntries = duplicateEntryIndex.get(slotKey);
 
-        base[entry.slot] = sanitizedNames.map((name) => ({
-          name,
-          source: hasAiNames ? 'ai' : 'manual',
-          strike: false,
-          startTime: normalizedStart || null,
-          endTime: normalizedEnd || null,
-        }));
+        base[entry.slot] = sanitizedNames.map((name) => {
+          const entryDuplicateKey = buildEntryDuplicateKey(
+            name,
+            normalizedStart || null,
+            normalizedEnd || null,
+          );
+          const isDuplicate = duplicateEntries?.has(entryDuplicateKey) ?? false;
+
+          return {
+            name,
+            source: hasAiNames ? 'ai' : 'manual',
+            strike: isDuplicate,
+            startTime: normalizedStart || null,
+            endTime: normalizedEnd || null,
+          };
+        });
       });
 
       return base;
     },
-    [participants],
+    [duplicateEntryIndex, participants],
   );
 
   const removeReservation = useCallback((reservationId: string) => {

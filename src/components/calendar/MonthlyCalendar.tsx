@@ -185,6 +185,7 @@ type SlotDetail = {
 type MonthlyCalendarProps = {
   onRequestScreenshotUpload?: () => void;
   onRegisterReservationExport?: (handler: (() => Promise<ReservationExportData>) | null) => void;
+  onReservationsChange?: (reservations: ReservationDayRecord[]) => void;
 };
 
 const buildSlotDetails = (reservations: ReservationDayRecord[]): SlotDetail[] => {
@@ -341,6 +342,7 @@ const filterReservationsByParticipant = (
 export const MonthlyCalendar = ({
   onRequestScreenshotUpload,
   onRegisterReservationExport,
+  onReservationsChange,
 }: MonthlyCalendarProps) => {
   const { participantName } = useReservationParticipants();
   const normalizedParticipantName = useMemo(() => participantName.trim(), [participantName]);
@@ -419,6 +421,14 @@ export const MonthlyCalendar = ({
     () => calendar.toCalendarDay(reservations),
     [calendar, reservations],
   );
+
+  useEffect(() => {
+    if (!onReservationsChange) {
+      return;
+    }
+    const flattenedReservations = Object.values(reservations).flat();
+    onReservationsChange(flattenedReservations);
+  }, [onReservationsChange, reservations]);
 
 const displayCalendarDays = useMemo(() => {
   if (!canFilterByParticipant || !showOwnReservationsOnly) {
