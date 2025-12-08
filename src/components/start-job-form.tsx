@@ -20,6 +20,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobResult, setJobResult] = useState<{ status: string; message: string | null } | null>(null);
+  const [jobHtmlUrl, setJobHtmlUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const firestore = useMemo(() => getFirestoreDb(), []);
@@ -38,6 +39,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
     setSubmitting(true);
     setFeedback(null);
     setIsError(false);
+    setJobHtmlUrl(null);
 
     try {
       const response = await fetch("/api/jobs", {
@@ -69,7 +71,9 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
         return;
       }
 
-      const data = (await response.json().catch(() => null)) as { jobId?: string } | null;
+      const data = (await response
+        .json()
+        .catch(() => null)) as { jobId?: string; html_url?: string | null } | null;
 
       if (!data?.jobId) {
         throw new Error("Missing jobId from server response");
@@ -77,6 +81,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
 
       setJobId(data.jobId);
       setJobStatus("pending");
+      setJobHtmlUrl(data.html_url ?? null);
       setJobResult(null);
       setPassword("");
     } catch (error) {
@@ -177,6 +182,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
         if (status && status !== "pending") {
           setJobResult({ status, message });
           setJobId(null);
+          setJobHtmlUrl(null);
         }
       },
       (error) => {
@@ -285,6 +291,18 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
             <p className="mt-2 text-xs text-stone-700">
               ページ閉じても実行されるけど応募完了/エラーは分かんなくなるよ！札幌予約管理システムからの応募完了メールに期待して！
             </p>
+            {jobHtmlUrl ? (
+              <p className="mt-4 text-xs font-semibold">
+                <a
+                  href={jobHtmlUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sky-700 underline"
+                >
+                  進行状況
+                </a>
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
