@@ -67,8 +67,10 @@ export async function main(): Promise<void> {
         }
       } catch (entryError) {
         failedEntries.push(entry);
+        const errorMessage = entryError instanceof Error ? entryError.message : String(entryError);
+        const stackTrace = entryError instanceof Error && entryError.stack ? `\nStacktrace:\n${entryError.stack}` : '';
         logEarlyReturn(
-          `Entry failed (${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}): ${entryError instanceof Error ? entryError.message : String(entryError)}`,
+          `Entry failed (${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}): ${errorMessage}${stackTrace}`,
         );
       }
     }

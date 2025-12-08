@@ -21,7 +21,7 @@ export async function runLotRequestPage(
 
   const listId = await targetInput.getAttribute('aria-controls');
   if (!listId) {
-    throwLoggedError('種目選択用のリストを取得できませんでした。');
+    throwLoggedError('[runLotRequestPage:No.4] 種目選択用のリストを取得できませんでした。');
   }
 
   const optionList = page.locator(`#${listId}`);

@@ -8,13 +8,13 @@ const LOT_SEARCH_URL = 'https://yoyaku.harp.lg.jp/sapporo/?u%5B0%5D=28&ud=';
 export async function runSearchPage(page: Page, entry: RepresentativeEntry): Promise<void> {
   const udParam = deriveUdParam(entry.date);
   if (!udParam) {
-    throwLoggedError(`日付の形式が不正なため検索を続行できません: ${entry.date}`);
+    throwLoggedError(`[runSearchPage:No.1] 日付の形式が不正なため検索を続行できません: ${entry.date}`);
   }
   await page.goto(`${LOT_SEARCH_URL}${udParam}`, { waitUntil: 'domcontentloaded' });
 
   const keyword = entry.gymName?.trim() ?? '';
   if (!keyword) {
-    throwLoggedError('代表者情報に施設名が含まれていないため検索を実行できません。');
+    throwLoggedError('[runSearchPage:No.1] 代表者情報に施設名が含まれていないため検索を実行できません。');
   }
 
   const facilityCombo = page.getByRole('combobox', { name: '施設' });

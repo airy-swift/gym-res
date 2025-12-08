@@ -32,7 +32,7 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
 
   const entryRange = parseEntryTime(entry.time);
   if (!entryRange) {
-    throwLoggedError(`エントリーの時間形式が不正です: ${entry.time}`);
+    throwLoggedError(`[runFacilityAvailabilityPage:No.3] エントリーの時間形式が不正です: ${entry.time}`);
   }
 
   const selectedSlots = await resolveSlotsForEntryTime(lotterySlots, entryRange);
@@ -60,7 +60,7 @@ async function getMatchingRow(page: Page, room: string): Promise<number> {
   const pageRoomTexts = await roomButtons.allInnerTexts();
   const matchingPageRoom = pageRoomTexts.filter((text: string) => text === room).at(0);
   if (!matchingPageRoom) {
-    throwLoggedError('施設一覧に一致する部屋名が見つかりませんでした。');
+    throwLoggedError('[runFacilityAvailabilityPage:No.3] 施設一覧に一致する部屋名が見つかりませんでした。');
   }
 
   const rows = page.locator('table.AvailabilityFrames_gridTable tr');
@@ -84,7 +84,7 @@ async function getMatchingRow(page: Page, room: string): Promise<number> {
   }
 
   if (!matchingRow || matchingRowIndex === -1) {
-    throwLoggedError('対象の行位置を特定できませんでした。');
+    throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
   }
 
   return matchingRowIndex;
@@ -109,7 +109,7 @@ async function getLotterySlots(page: Page, matchingRowIndex: number, booth?: str
   }
 
   if (!targetRow) {
-    throwLoggedError('希望するブース行を特定できませんでした。');
+    throwLoggedError('[runFacilityAvailabilityPage:No.3] 希望するブース行を特定できませんでした。');
   }
 
   const lotteryButtons = targetRow.locator('button[title$="抽選申込可"]');
@@ -167,7 +167,7 @@ async function resolveSlotsForEntryTime(
     }
   }
 
-  throwLoggedError('希望する時間帯に一致するスロットを取得できませんでした。');
+  throwLoggedError('[runFacilityAvailabilityPage:No.3] 希望する時間帯に一致するスロットを取得できませんでした。');
 }
 
 async function verifySelectionSummary(page: Page, entry: RepresentativeEntry): Promise<void> {
@@ -218,7 +218,7 @@ async function verifySelectionSummary(page: Page, entry: RepresentativeEntry): P
       expectedDate: entry.date,
       expectedTime: entry.time,
     });
-    throwLoggedError('選択済みの日時がリクエスト内容と一致しません。');
+    throwLoggedError('[runFacilityAvailabilityPage:No.3] 選択済みの日時がリクエスト内容と一致しません。');
   }
 }
 

@@ -14,7 +14,6 @@ type StartJobFormProps = {
 export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
-  const [entryCount, setEntryCount] = useState(entryOptions[0] ?? 1);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -56,7 +55,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         body: JSON.stringify({
           userId: loginId,
           password,
-          entryCount,
+          entryCount: 1,
           groupId,
         }),
       });
@@ -143,7 +142,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   useEffect(() => {
     const savedLoginId = readCookie("startJobLoginId");
     const savedPassword = readCookie("startJobPassword");
-    const savedEntryCount = readCookie("startJobEntryCount");
 
     if (savedLoginId) {
       setLoginId(savedLoginId);
@@ -151,11 +149,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
 
     if (savedPassword) {
       setPassword(savedPassword);
-    }
-
-    const parsedEntryCount = savedEntryCount ? Number(savedEntryCount) : NaN;
-    if (!Number.isNaN(parsedEntryCount) && entryOptions.includes(parsedEntryCount)) {
-      setEntryCount(parsedEntryCount);
     }
 
     setIsInitialized(true);
@@ -182,8 +175,9 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       return;
     }
 
-    writeCookie("startJobEntryCount", String(entryCount));
-  }, [isInitialized, entryCount]);
+    // Keep legacy cookie cleanup for compatibility.
+    writeCookie("startJobEntryCount", "1");
+  }, [isInitialized]);
 
   useEffect(() => {
     if (!jobId) {
@@ -269,25 +263,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
               required
             />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="number" className="text-sm font-medium text-stone-600">
-              抽選応募個数
-            </label>
-            <select
-              id="number"
-              name="number"
-              value={entryCount}
-              onChange={(event) => setEntryCount(Number(event.target.value))}
-              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
-            >
-              {entryOptions.map((num) => (
-                <option key={num} value={num}>
-                  {num}
-                </option>
-              ))}
-            </select>
           </div>
 
           <button
