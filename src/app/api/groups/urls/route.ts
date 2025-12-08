@@ -4,6 +4,32 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { getFirestoreDb } from '@/lib/firebase/app';
 import { getGroupDocument } from '@/lib/firebase';
 
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const groupId = searchParams.get('groupId');
+
+  if (!groupId) {
+    return NextResponse.json({ error: 'Missing groupId' }, { status: 400 });
+  }
+
+  try {
+    const group = await getGroupDocument(groupId);
+
+    if (!group) {
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 });
+    }
+
+    const urls = Array.isArray(group.urls)
+      ? group.urls.filter((item): item is string => typeof item === 'string' && item.length > 0)
+      : [];
+
+    return NextResponse.json({ urls }, { status: 200 });
+  } catch (error) {
+    console.error('Failed to fetch urls', error);
+    return NextResponse.json({ error: 'Failed to fetch urls' }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   let body: { groupId?: string; urls?: unknown };
 

@@ -22,6 +22,16 @@ export function GroupUrlsForm({ groupId, initialValue }: GroupUrlsFormProps) {
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
 
+    const urlPrefix = "https://yoyaku.harp.lg.jp/sapporo/LotRequests/Insert/";
+
+    const hasInvalidUrl = urls.some((url) => !url.startsWith(urlPrefix));
+
+    if (hasInvalidUrl) {
+      setStatus("error");
+      setMessage(`URLは必ず ${urlPrefix} で始まる必要があります。`);
+      return;
+    }
+
     try {
       const response = await fetch("/api/groups/urls", {
         method: "POST",
@@ -59,7 +69,7 @@ export function GroupUrlsForm({ groupId, initialValue }: GroupUrlsFormProps) {
           value={value}
           onChange={(event) => setValue(event.target.value)}
           className="mt-2 min-h-[320px] w-full rounded-3xl border border-stone-200 bg-white/90 p-5 text-sm text-stone-900 shadow-inner outline-none transition focus:border-sky-500"
-          placeholder="https://example.com/1\nhttps://example.com/2"
+          placeholder={'https://yoyaku.harp.lg.jp/sapporo/LotRequests/Insert/xxxxxx/xxx0\nhttps://yoyaku.harp.lg.jp/sapporo/LotRequests/Insert/xxxxxx/xxx1\n...'}
         />
       </div>
 

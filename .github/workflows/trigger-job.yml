@@ -35,13 +35,20 @@ jobs:
           SERVICE_USER=$(echo "$JOB_JSON" | jq -r '.userId')
           SERVICE_PASS=$(echo "$JOB_JSON" | jq -r '.password')
           ENTRY_COUNT=$(echo "$JOB_JSON" | jq -r '.entryCount')
+          GROUP_ID=$(echo "$JOB_JSON" | jq -r '.groupId // empty')
 
           echo "::add-mask::$SERVICE_USER"
           echo "::add-mask::$SERVICE_PASS"
 
+          if [ -z "$GROUP_ID" ]; then
+            echo 'groupId is required in job data'
+            exit 1
+          fi
+
           echo "SERVICE_USER=$SERVICE_USER" >> "$GITHUB_ENV"
           echo "SERVICE_PASS=$SERVICE_PASS" >> "$GITHUB_ENV"
           echo "ENTRY_COUNT=$ENTRY_COUNT" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_GROUP_ID=$GROUP_ID" >> "$GITHUB_ENV"
 
       - name: Run reservation job
         id: run_reservation
@@ -49,6 +56,7 @@ jobs:
           SERVICE_USER: ${{ env.SERVICE_USER }}
           SERVICE_PASS: ${{ env.SERVICE_PASS }}
           ENTRY_COUNT: ${{ env.ENTRY_COUNT }}
+          PLAYWRIGHT_GROUP_ID: ${{ env.PLAYWRIGHT_GROUP_ID }}
         run: |
           set -euo pipefail
           SERVICE_USER="$SERVICE_USER" \
@@ -64,7 +72,7 @@ jobs:
         if: always()
         run: |
           if [ -f play.log ]; then
-            tail -n 200 play.log > job-error-summary.txt
+            tail -n 20 play.log > job-error-summary.txt
           else
             echo 'No play.log captured' > job-error-summary.txt
           fi
@@ -78,13 +86,17 @@ jobs:
       - name: Update job status on failure
         if: failure()
         run: |
-          SUMMARY=$(cat job-error-summary.txt 2>/dev/null || echo 'No summary available')
-          MESSAGE=$(printf 'GitHub Actions run %s failed.\n\nLast log lines:\n%s' "$GITHUB_RUN_ID" "$SUMMARY")
+          SUMMARY_FILE="job-error-summary.txt"
+          if [ ! -f "$SUMMARY_FILE" ]; then
+            echo 'No summary available' > "$SUMMARY_FILE"
+          fi
+
           PAYLOAD=$(jq -n \
             --arg jobId "$JOB_ID" \
             --arg status "failed" \
-            --arg message "$MESSAGE" \
-            '{jobId: $jobId, status: $status, message: $message}')
+            --arg runId "$GITHUB_RUN_ID" \
+            --rawfile log "$SUMMARY_FILE" \
+            '{jobId: $jobId, status: $status, message: ("GitHub Actions run " + $runId + " failed.\n\nLast log lines:\n" + $log)}')
 
           curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
             -H 'Content-Type: application/json' \

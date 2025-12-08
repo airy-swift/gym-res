@@ -41,7 +41,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </header>
 
-        <StartJobForm entryOptions={numbers} />
+        <StartJobForm entryOptions={numbers} groupId={group.id} />
       </section>
     </main>
   );

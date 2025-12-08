@@ -7,10 +7,11 @@ import { getFirestoreDb } from "@/lib/firebase";
 
 type StartJobFormProps = {
   entryOptions: number[];
+  groupId: string;
   className?: string;
 };
 
-export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
+export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [entryCount, setEntryCount] = useState(entryOptions[0] ?? 1);
@@ -56,6 +57,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
           userId: loginId,
           password,
           entryCount,
+          groupId,
         }),
       });
 
