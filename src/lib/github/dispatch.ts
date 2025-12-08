@@ -51,7 +51,7 @@ export async function getLatestWorkflowInfo(): Promise<{ actionsUrl?: string; jo
   if (!response.ok) {
     const payload = await response.text();
     console.error('Failed to fetch workflow runs', response.status, payload);
-    return undefined;
+    return {};
   }
 
   const data = (await response.json()) as {
