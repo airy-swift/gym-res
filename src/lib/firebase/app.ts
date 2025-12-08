@@ -69,4 +69,3 @@ export const getFirestoreDb = (): Firestore => {
   cachedFirestore = getFirestore(getFirebaseApp());
   return cachedFirestore;
 };
-

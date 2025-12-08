@@ -4,19 +4,24 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "api": "next dev --port 4000",
     "build": "next build",
     "start": "next start",
+    "play": "tsx playwright/main.ts",
+    "play:test": "playwright test --config=playwright/playwright.config.ts",
     "lint": "eslint"
   },
   "dependencies": {
     "@tailwindcss/line-clamp": "^0.4.4",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
     "firebase": "^12.5.0",
     "next": "16.0.1",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -25,6 +30,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.1",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5"
   }
 }

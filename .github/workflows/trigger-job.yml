@@ -1,0 +1,100 @@
+name: Trigger Job Via API
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: 'Existing job ID to process'
+        required: true
+
+jobs:
+  process-job:
+    runs-on: ubuntu-latest
+    env:
+      API_BASE_URL: ${{ secrets.API_BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      JOB_ID: ${{ inputs.jobId }}
+    steps:
+      - name: Validate configuration
+        run: |
+          test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
+          test -n "$API_TOKEN" || { echo 'API_TOKEN secret is required'; exit 1; }
+          test -n "$JOB_ID" || { echo 'workflow_dispatch input jobId is required'; exit 1; }
+
+      - name: Fetch job data
+        run: |
+          set -euo pipefail
+          JOB_JSON=$(curl -sSf -G "$API_BASE_URL/api/jobs" \
+            -H "Authorization: Bearer $API_TOKEN" \
+            --data-urlencode "jobId=$JOB_ID" \
+            -H 'Accept: application/json')
+
+          SERVICE_USER=$(echo "$JOB_JSON" | jq -r '.userId')
+          SERVICE_PASS=$(echo "$JOB_JSON" | jq -r '.password')
+          ENTRY_COUNT=$(echo "$JOB_JSON" | jq -r '.entryCount')
+
+          echo "::add-mask::$SERVICE_USER"
+          echo "::add-mask::$SERVICE_PASS"
+
+          echo "SERVICE_USER=$SERVICE_USER" >> "$GITHUB_ENV"
+          echo "SERVICE_PASS=$SERVICE_PASS" >> "$GITHUB_ENV"
+          echo "ENTRY_COUNT=$ENTRY_COUNT" >> "$GITHUB_ENV"
+
+      - name: Run reservation job
+        id: run_reservation
+        env:
+          SERVICE_USER: ${{ env.SERVICE_USER }}
+          SERVICE_PASS: ${{ env.SERVICE_PASS }}
+          ENTRY_COUNT: ${{ env.ENTRY_COUNT }}
+        run: |
+          set -euo pipefail
+          SERVICE_USER="$SERVICE_USER" \
+          SERVICE_PASS="$SERVICE_PASS" \
+          ENTRY_COUNT="$ENTRY_COUNT" \
+          npm run play 2>&1 | tee play.log
+
+      - name: Build error summary
+        if: always()
+        run: |
+          if [ -f play.log ]; then
+            tail -n 200 play.log > job-error-summary.txt
+          else
+            echo 'No play.log captured' > job-error-summary.txt
+          fi
+
+          {
+            echo "JOB_ERROR_SUMMARY<<'EOF'"
+            cat job-error-summary.txt
+            echo 'EOF'
+          } >> "$GITHUB_ENV"
+
+      - name: Update job status on failure
+        if: failure()
+        run: |
+          SUMMARY=$(cat job-error-summary.txt 2>/dev/null || echo 'No summary available')
+          MESSAGE=$(printf 'GitHub Actions run %s failed.\n\nLast log lines:\n%s' "$GITHUB_RUN_ID" "$SUMMARY")
+          PAYLOAD=$(jq -n \
+            --arg jobId "$JOB_ID" \
+            --arg status "failed" \
+            --arg message "$MESSAGE" \
+            '{jobId: $jobId, status: $status, message: $message}')
+
+          curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $API_TOKEN" \
+            -d "$PAYLOAD"
+
+      - name: Update job status on success
+        if: success()
+        run: |
+          MESSAGE="Processed via GitHub Actions run $GITHUB_RUN_ID"
+          PAYLOAD=$(jq -n \
+            --arg jobId "$JOB_ID" \
+            --arg status "completed" \
+            --arg message "$MESSAGE" \
+            '{jobId: $jobId, status: $status, message: $message}')
+
+          curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
+            -H 'Content-Type: application/json' \
+            -H "Authorization: Bearer $API_TOKEN" \
+            -d "$PAYLOAD"
