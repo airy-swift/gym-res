@@ -4,10 +4,6 @@ import { getGroupDocument } from '@/lib/firebase';
 import { isAuthorizedRequest } from '@/lib/api/auth';
 
 export async function GET(request: NextRequest) {
-  // if (!isAuthorizedRequest(request)) {
-  //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  // }
-
   const { searchParams } = new URL(request.url);
   const groupId = searchParams.get('groupId');
 

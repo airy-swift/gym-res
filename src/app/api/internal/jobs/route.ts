@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
-import { randomUUID } from 'node:crypto';
+import { deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 
 import { getFirestoreDb } from '@/lib/firebase/app';
-import { isAuthorizedRequest } from '@/lib/api/auth';
-import { dispatchJobWorkflow } from '@/lib/github/dispatch';
 import { markJobAsFailed } from '@/lib/api/internal-jobs';
+import { dispatchJobWorkflow } from '@/lib/github/dispatch';
+import { randomUUID } from 'node:crypto';
 
 export async function POST(request: NextRequest) {
   const db = getFirestoreDb();
@@ -60,37 +59,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
-  if (!isAuthorizedRequest(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const db = getFirestoreDb();
-  const jobId = request.nextUrl.searchParams.get('jobId');
-
-  if (!jobId) {
-    return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
-  }
-
-  try {
-    const snapshot = await getDoc(doc(db, 'jobs', jobId));
-
-    if (!snapshot.exists()) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({ jobId, ...snapshot.data() }, { status: 200 });
-  } catch (error) {
-    console.error('Failed to fetch job', error);
-    return NextResponse.json({ error: 'Failed to fetch job' }, { status: 500 });
-  }
-}
-
 export async function PATCH(request: NextRequest) {
-  if (!isAuthorizedRequest(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const db = getFirestoreDb();
 
   let body: { jobId?: string; status?: string; message?: string };
@@ -104,33 +73,22 @@ export async function PATCH(request: NextRequest) {
 
   const { jobId, status, message } = body;
 
-  if (!jobId) {
-    return NextResponse.json({ error: 'Missing jobId' }, { status: 400 });
-  }
-
-  if (status === undefined && message === undefined) {
-    return NextResponse.json({ error: 'status or message is required' }, { status: 400 });
-  }
-
-  const updates: Record<string, unknown> = {
-    updatedAt: serverTimestamp(),
-    userId: deleteField(),
-    password: deleteField(),
-  };
-
-  if (status !== undefined) {
-    updates.status = status;
-  }
-
-  if (message !== undefined) {
-    updates.message = message;
+  if (!jobId || !status || !message) {
+    return NextResponse.json({ error: 'jobId, status, and message are required' }, { status: 400 });
   }
 
   try {
-    await updateDoc(doc(db, 'jobs', jobId), updates);
+    await updateDoc(doc(db, 'jobs', jobId), {
+      status,
+      message,
+      updatedAt: serverTimestamp(),
+      userId: deleteField(),
+      password: deleteField(),
+    });
+
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {
-    console.error('Failed to update job', error);
+    console.error('Failed to update job internally', error);
     return NextResponse.json({ error: 'Failed to update job' }, { status: 500 });
   }
 }
