@@ -118,7 +118,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         } catch (error) {
           console.error("Failed to fetch latest workflow URL", error);
         }
-      }, 1200);
+      }, 1800);
     } catch (error) {
       console.error("Failed to start job", error);
       setIsError(true);
