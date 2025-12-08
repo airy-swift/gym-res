@@ -9,10 +9,7 @@ export async function runConfirmationPage(page: Page): Promise<boolean> {
   await page.waitForURL((url) => url.toString().startsWith(TARGET_URL), {
     timeout: 10_000,
   });
-  void captureScreenshot(page, 'runConfirmationPage').catch((error) => {
-    console.warn('Failed to capture screenshot (runConfirmationPage):', error);
-  });
-
+  
   const acknowledgeCheckbox = page.locator('span', { hasText: '注意事項を確認しました' }).first();
   await acknowledgeCheckbox.waitFor({ state: 'visible', timeout: 10_000 });
   await acknowledgeCheckbox.click();

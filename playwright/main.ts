@@ -6,6 +6,7 @@ import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
 import { runLotRequestPage } from './page/lot_request_page';
 import { runConfirmationPage } from './page/confirmation_page';
+import { ensureRequestStatusPage } from './page/request_status_page';
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
 export const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
@@ -23,21 +24,28 @@ export async function main(): Promise<void> {
 
     await page.goto(CANCEL_URL, { waitUntil: 'domcontentloaded' });
     await runLoginPage(page);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
 
     const groupUrls = await fetchGroupUrlsAfterLogin();
     logEarlyReturn(`Fetched ${groupUrls.length} group URLs for Playwright run.`);
     console.log(groupUrls);
-    
-    // await runLotRequestPage(page);
-    // await runConfirmationPage(page);
 
+    await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
+    const requestStatusEntries = await ensureRequestStatusPage(page);
+    
+    for (const url of groupUrls) {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      
+      await runLotRequestPage(page, requestStatusEntries);
+      await runConfirmationPage(page);
+    }
   } catch (error) {
     logEarlyReturn(
       `Login flow failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;
   } finally {
-    await browser?.close();
+    // await browser?.close();
   }
 }
 
