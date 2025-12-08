@@ -17,7 +17,7 @@ export function throwLoggedError(message: string): never {
 
 export async function fetchRepresentativeEntries(): Promise<RepresentativeEntry[]> {
   const groupId = process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID;
-  const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
 
   if (!groupId) {
     logEarlyReturn('PLAYWRIGHT_GROUP_ID is not set; skipping representative entry fetch.');
@@ -25,7 +25,7 @@ export async function fetchRepresentativeEntries(): Promise<RepresentativeEntry[
   }
 
   if (!apiBaseUrl) {
-    logEarlyReturn('PLAYWRIGHT_API_BASE_URL is not set; skipping API fetch.');
+    logEarlyReturn('API_BASE_URL is not set; skipping API fetch.');
     return [];
   }
 
