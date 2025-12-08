@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Validate configuration
         run: |
           test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
@@ -55,7 +55,6 @@ jobs:
           SERVICE_PASS="$SERVICE_PASS" \
           ENTRY_COUNT="$ENTRY_COUNT" \
           npm run play 2>&1 | tee play.log
-        working-directory: playwright
         continue-on-error: true
 
       - name: Build error summary
