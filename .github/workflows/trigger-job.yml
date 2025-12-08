@@ -15,6 +15,9 @@ jobs:
       API_TOKEN: ${{ secrets.API_TOKEN }}
       JOB_ID: ${{ inputs.jobId }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
       - name: Validate configuration
         run: |
           test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
