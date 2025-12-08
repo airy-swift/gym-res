@@ -14,9 +14,19 @@ jobs:
       API_BASE_URL: ${{ secrets.API_BASE_URL }}
       API_TOKEN: ${{ secrets.API_TOKEN }}
       JOB_ID: ${{ inputs.jobId }}
+      JOB_BRANCH: ${{ inputs.jobId }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare job branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git fetch origin
+          git checkout -B "$JOB_BRANCH"
 
       - name: Validate configuration
         run: |
@@ -91,6 +101,23 @@ jobs:
             } >> "$GITHUB_ENV"
           else
             echo "RESERVATION_LOG=log.txt not found" >> "$GITHUB_ENV"
+          fi
+
+      - name: Commit debug screenshot
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f playwright/debug.png ]; then
+            git add playwright/debug.png
+            if git diff --cached --quiet; then
+              echo 'No screenshot changes to commit.'
+              git reset HEAD --quiet
+            else
+              git commit -m "Add debug screenshot for job $JOB_ID (run $GITHUB_RUN_ID)"
+              git push origin "$JOB_BRANCH"
+            fi
+          else
+            echo 'No debug screenshot to commit.'
           fi
 
       - name: Update job status on failure

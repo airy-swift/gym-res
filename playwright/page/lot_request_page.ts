@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { throwLoggedError } from '../util';
+import { captureScreenshot, throwLoggedError } from '../util';
 import type { RepresentativeEntry } from '../types';
 
 export const LOT_REQUEST_URL = 'https://yoyaku.harp.lg.jp/sapporo/LotRequests/';
@@ -8,10 +8,15 @@ export async function runLotRequestPage(
   page: Page,
   entries: RepresentativeEntry[],
 ): Promise<void> {
-  await page.waitForURL((url) => url.toString().startsWith(LOT_REQUEST_URL), {
-    timeout: 10_000,
-    waitUntil: 'domcontentloaded',
-  });
+  try {
+    await page.waitForURL((url) => url.toString().startsWith(LOT_REQUEST_URL), {
+      timeout: 10_000,
+      waitUntil: 'domcontentloaded',
+    });
+  } catch (error) {
+    await captureScreenshot(page, 'debug');
+    throw error;
+  }
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
 
   await new Promise(resolve => setTimeout(resolve, 3_000));
