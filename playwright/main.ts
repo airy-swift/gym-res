@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { fetchRepresentativeEntries, logEarlyReturn } from './util';
+import { captureScreenshot, fetchRepresentativeEntries, logEarlyReturn } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
@@ -90,6 +90,13 @@ export async function main(): Promise<void> {
     );
     throw error;
   } finally {
+    if (page) {
+      try {
+        await captureScreenshot(page, 'debug');
+      } catch (screenshotError) {
+        console.error('Failed to capture debug screenshot', screenshotError);
+      }
+    }
     await browser?.close();
     await persistLogFile(successEntries, failedEntries);
   }
