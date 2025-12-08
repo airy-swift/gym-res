@@ -28,7 +28,10 @@ export async function main(): Promise<void> {
 
   try {
     browser = await chromium.launch({ headless: HEADLESS });
-    const context = await browser.newContext();
+    const context = await browser.newContext({
+      locale: 'ja-JP',
+      timezoneId: 'Asia/Tokyo',
+    });
     page = await context.newPage();
 
     await page.goto(CANCEL_URL, { waitUntil: 'domcontentloaded' });

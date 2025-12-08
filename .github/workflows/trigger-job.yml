@@ -21,6 +21,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set timezone to JST
+        run: |
+          sudo timedatectl set-timezone Asia/Tokyo
+          date
+
       - name: Prepare job branch
         run: |
           git config user.name 'github-actions[bot]'
