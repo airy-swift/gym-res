@@ -71,8 +71,8 @@ jobs:
       - name: Build error summary
         if: always()
         run: |
-          if [ -f play.log ]; then
-            tail -n 20 play.log > job-error-summary.txt
+          if [ -f playwright/play.log ]; then
+            tail -n 20 playwright/play.log > job-error-summary.txt
           else
             echo 'No play.log captured' > job-error-summary.txt
           fi
@@ -82,6 +82,16 @@ jobs:
             cat job-error-summary.txt
             echo 'EOF'
           } >> "$GITHUB_ENV"
+
+          if [ -f playwright/log.txt ]; then
+            {
+              echo "RESERVATION_LOG<<'EOF'"
+              cat playwright/log.txt
+              echo 'EOF'
+            } >> "$GITHUB_ENV"
+          else
+            echo "RESERVATION_LOG=log.txt not found" >> "$GITHUB_ENV"
+          fi
 
       - name: Update job status on failure
         if: failure()
@@ -95,8 +105,9 @@ jobs:
             --arg jobId "$JOB_ID" \
             --arg status "failed" \
             --arg runId "$GITHUB_RUN_ID" \
+            --arg reservationLog "${RESERVATION_LOG:-log.txt not found}" \
             --rawfile log "$SUMMARY_FILE" \
-            '{jobId: $jobId, status: $status, message: ("GitHub Actions run " + $runId + " failed.\n\nLast log lines:\n" + $log)}')
+            '{jobId: $jobId, status: $status, message: ("GitHub Actions run " + $runId + " failed.\n\nLast log lines:\n" + $log + "\n\nReservation summary:\n" + $reservationLog)}')
 
           curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
             -H 'Content-Type: application/json' \
@@ -106,7 +117,8 @@ jobs:
       - name: Update job status on success
         if: success()
         run: |
-          MESSAGE="Processed via GitHub Actions run $GITHUB_RUN_ID"
+          LOG_SUMMARY=${RESERVATION_LOG:-log.txt not found}
+          MESSAGE=$(printf 'GitHub Actions run %s succeeded.\n\nReservation summary:\n%s' "$GITHUB_RUN_ID" "$LOG_SUMMARY")
           PAYLOAD=$(jq -n \
             --arg jobId "$JOB_ID" \
             --arg status "completed" \

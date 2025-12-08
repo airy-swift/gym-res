@@ -1,16 +1,10 @@
 import type { Page } from '@playwright/test';
 import { logEarlyReturn } from '../util';
+import type { RepresentativeEntry } from '../types';
 
 const REQUEST_STATUS_URL =
   'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
-
-export type StatusEntry = {
-  text: string;
-  detail: string;
-  date: string;
-  time: string;
-};
 
 function toDate(source: string | null): Date | null {
   if (!source) return null;
@@ -29,13 +23,13 @@ function formatDateLabel(dateValue: Date | null): string {
   return `${year}年${month}月${day}日(${weekday})`;
 }
 
-export async function ensureRequestStatusPage(page: Page): Promise<StatusEntry[]> {
+export async function ensureRequestStatusPage(page: Page): Promise<RepresentativeEntry[]> {
   await page.waitForURL(url => url.toString().startsWith(REQUEST_STATUS_URL), {
     timeout: 10_000,
   });
   await page.getByRole('button', { name: /申込状態：\s*すべての状態/ }).click();
   await page.getByRole('button', { name: '抽選待ち' }).click();
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, 3_000));
 
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
   const lotteryList = page.locator('div[role="list"].v-list.is-withBorder-marginL.h-radius-s').first();
@@ -47,7 +41,7 @@ export async function ensureRequestStatusPage(page: Page): Promise<StatusEntry[]
     return [];
   }
 
-  const results: StatusEntry[] = [];
+  const results: RepresentativeEntry[] = [];
   const now = new Date();
   const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const targetYear = nextMonth.getFullYear();
@@ -68,7 +62,6 @@ export async function ensureRequestStatusPage(page: Page): Promise<StatusEntry[]
       ? (await statusIcon.innerText()).trim()
       : '';
     if (statusText !== 'lottery_wait') {
-      logEarlyReturn('Skipping entry that is not lottery wait.');
       continue;
     }
 
@@ -98,7 +91,7 @@ export async function ensureRequestStatusPage(page: Page): Promise<StatusEntry[]
           .trim()
       : '';
 
-    results.push({ text: linkText, detail, date: dateLabel, time: timeRange });
+    results.push({ gymName: linkText, room: detail, date: dateLabel, time: timeRange });
   }
   return results;
 }

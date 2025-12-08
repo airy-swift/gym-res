@@ -104,10 +104,12 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         throw new Error("Geminiの応答を解析できませんでした。");
       }
 
-      await saveEntriesToGroup(groupId, parsedEntries);
+      const mergedEntries = [...entries, ...parsedEntries];
 
-      setEntries(parsedEntries);
-      setInfoMessage("Firestoreに保存しました");
+      await saveEntriesToGroup(groupId, mergedEntries);
+
+      setEntries(mergedEntries);
+      setInfoMessage("Firestoreに追加しました");
       setStatus("success");
     } catch (uploadError) {
       console.error("画像解析に失敗しました", uploadError);
@@ -116,7 +118,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         uploadError instanceof Error ? uploadError.message : "アップロード中にエラーが発生しました。",
       );
     }
-  }, [groupId, groupName]);
+  }, [entries, groupId, groupName]);
 
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
     const includesFiles = event.dataTransfer?.types?.includes("Files");
