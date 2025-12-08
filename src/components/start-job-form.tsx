@@ -33,6 +33,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   const [jobDebugImageUrl, setJobDebugImageUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
+  const latestJobIdRef = useRef<string | null>(null);
 
   const firestore = useMemo(() => getFirestoreDb(), []);
 
@@ -97,7 +98,8 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       }
 
       setJobId(data.jobId);
-      setJobDebugImageUrl(buildDebugImageUrl(data.jobId));
+      latestJobIdRef.current = data.jobId;
+      setJobDebugImageUrl(null);
       setJobStatus("pending");
       setJobResult(null);
       setPassword("");
@@ -236,6 +238,12 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     };
   }, []);
 
+  useEffect(() => {
+    if (jobResult?.status === "failed") {
+      setJobDebugImageUrl(buildDebugImageUrl(latestJobIdRef.current));
+    }
+  }, [jobResult]);
+
   const isJobPending = jobStatus === "pending";
   const shouldShowForm = !jobResult;
 
@@ -365,5 +373,6 @@ function buildDebugImageUrl(jobId: string | null): string | null {
     return null;
   }
 
-  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${jobId}/playwright/debug.png`;
+  const cacheBust = Date.now();
+  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${jobId}/playwright/debug.png?ts=${cacheBust}`;
 }
