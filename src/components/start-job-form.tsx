@@ -5,6 +5,15 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 
+const GITHUB_OWNER =
+  process.env.NEXT_PUBLIC_GITHUB_OWNER ??
+  process.env.NEXT_PUBLIC_GITHUB_REPOSITORY?.split("/")?.[0] ??
+  null;
+const GITHUB_REPO =
+  process.env.NEXT_PUBLIC_GITHUB_REPO ??
+  process.env.NEXT_PUBLIC_GITHUB_REPOSITORY?.split("/")?.[1] ??
+  null;
+
 type StartJobFormProps = {
   entryOptions: number[];
   groupId: string;
@@ -21,6 +30,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobResult, setJobResult] = useState<{ status: string; message: string | null } | null>(null);
   const [jobHtmlUrl, setJobHtmlUrl] = useState<string | null>(null);
+  const [jobDebugImageUrl, setJobDebugImageUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
 
@@ -41,6 +51,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     setFeedback(null);
     setIsError(false);
     setJobHtmlUrl(null);
+    setJobDebugImageUrl(null);
     if (workflowLinkTimeoutRef.current !== null) {
       window.clearTimeout(workflowLinkTimeoutRef.current);
       workflowLinkTimeoutRef.current = null;
@@ -86,14 +97,14 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       }
 
       setJobId(data.jobId);
+      setJobDebugImageUrl(buildDebugImageUrl(data.jobId));
       setJobStatus("pending");
-      setJobHtmlUrl(null);
       setJobResult(null);
       setPassword("");
 
       workflowLinkTimeoutRef.current = window.setTimeout(async () => {
         try {
-          const workflowResponse = await fetch("/api/internal/workflow");
+      const workflowResponse = await fetch("/api/internal/workflow");
 
           if (workflowResponse.ok) {
             const workflowData = (await workflowResponse
@@ -201,7 +212,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         if (status && status !== "pending") {
           setJobResult({ status, message });
           setJobId(null);
-          setJobHtmlUrl(null);
           if (workflowLinkTimeoutRef.current !== null) {
             window.clearTimeout(workflowLinkTimeoutRef.current);
             workflowLinkTimeoutRef.current = null;
@@ -281,7 +291,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         </form>
       ) : (
         <div className="space-y-4 rounded-3xl border border-stone-200 bg-white/80 p-8 text-center shadow-sm">
-          {jobResult?.status === "success" ? (
+          {jobResult?.status === "completed" ? (
             <>
               <p className="text-lg font-semibold text-stone-900">抽選応募完了！</p>
               <p className="text-base text-stone-600">{jobResult.message ?? "特に言うことないです"}</p>
@@ -290,6 +300,19 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
             <>
               <p className="text-lg font-semibold text-red-600">応募が失敗しました (failed)</p>
               <p className="text-base text-stone-600">{jobResult?.message ?? "何らかのエラーが発生しました。"}</p>
+              {jobDebugImageUrl ? (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs text-stone-500">デバッグスクリーンショット</p>
+                  <div className="overflow-hidden rounded-2xl border border-stone-200">
+                    <img
+                      src={jobDebugImageUrl}
+                      alt="Playwright debug screenshot"
+                      className="h-auto w-full"
+                      loading="lazy"
+                    />
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
 
@@ -335,4 +358,12 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       ) : null}
     </>
   );
+}
+
+function buildDebugImageUrl(jobId: string | null): string | null {
+  if (!jobId || !GITHUB_OWNER || !GITHUB_REPO) {
+    return null;
+  }
+
+  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${jobId}/playwright/debug.png`;
 }

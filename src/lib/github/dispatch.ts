@@ -1,5 +1,7 @@
 const workflowRepo = process.env.GITHUB_WORKFLOW_REPO;
 const workflowFile = process.env.GITHUB_WORKFLOW_FILE ?? 'trigger-job.yml';
+const workflowOwner = workflowRepo?.split('/')?.[0];
+const workflowRepoName = workflowRepo?.split('/')?.[1];
 const workflowRef = process.env.GITHUB_WORKFLOW_REF ?? 'main';
 const workflowToken = process.env.GITHUB_WORKFLOW_TOKEN;
 
@@ -55,7 +57,7 @@ export async function getLatestWorkflowInfo(): Promise<{ actionsUrl?: string; jo
   }
 
   const data = (await response.json()) as {
-    workflow_runs?: Array<{ html_url?: string; jobs_url?: string }>;
+    workflow_runs?: Array<{ id?: number; html_url?: string; jobs_url?: string }>;
   };
 
   const latestRun = data.workflow_runs?.[0];
@@ -67,7 +69,7 @@ export async function getLatestWorkflowInfo(): Promise<{ actionsUrl?: string; jo
   const actionsUrl = latestRun.html_url;
   let jobUrl: string | undefined;
 
-  if (latestRun.jobs_url) {
+  if (latestRun?.jobs_url) {
     try {
       const jobsResponse = await fetch(latestRun.jobs_url, {
         method: 'GET',
@@ -76,13 +78,15 @@ export async function getLatestWorkflowInfo(): Promise<{ actionsUrl?: string; jo
 
       if (jobsResponse.ok) {
         const jobsPayload = (await jobsResponse.json()) as {
-          jobs?: Array<{ html_url?: string }>;
+          jobs?: Array<{ id?: number; html_url?: string }>;
         };
 
-        const firstJobHtmlUrl = jobsPayload.jobs?.[0]?.html_url;
+        const firstJob = jobsPayload.jobs?.[0];
 
-        if (firstJobHtmlUrl) {
-          jobUrl = firstJobHtmlUrl;
+        if (firstJob?.id && workflowOwner && workflowRepoName && latestRun.id) {
+          jobUrl = `https://github.com/${workflowOwner}/${workflowRepoName}/actions/runs/${latestRun.id}/job/${firstJob.id}`;
+        } else if (firstJob?.html_url) {
+          jobUrl = firstJob.html_url;
         }
       } else {
         console.warn('Failed to fetch jobs list for run');
