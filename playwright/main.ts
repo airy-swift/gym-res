@@ -4,9 +4,10 @@ import { chromium, type Browser, type Page } from '@playwright/test';
 import { logEarlyReturn } from './util';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
-import { runLotRequestPage } from './page/lot_request_page';
+import { LOT_REQUEST_URL, runLotRequestPage } from './page/lot_request_page';
 import { runConfirmationPage } from './page/confirmation_page';
 import { ensureRequestStatusPage } from './page/request_status_page';
+import { deriveUdParam, fetchRepresentativeEntries } from './main-util';
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
 export const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
@@ -26,18 +27,27 @@ export async function main(): Promise<void> {
     await runLoginPage(page);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
 
-    const groupUrls = await fetchGroupUrlsAfterLogin();
-    logEarlyReturn(`Fetched ${groupUrls.length} group URLs for Playwright run.`);
-    console.log(groupUrls);
+    // 代表が予約して欲しい枠
+    const representativeEntries = await fetchRepresentativeEntries();
+    logEarlyReturn(`Fetched ${representativeEntries.length} representative entries for Playwright run.`);
 
+    // 今のアカウントが既に応募済みの枠
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const requestStatusEntries = await ensureRequestStatusPage(page);
     
-    for (const url of groupUrls) {
-      await page.goto(url, { waitUntil: 'domcontentloaded' });
-      
-      await runLotRequestPage(page, requestStatusEntries);
-      await runConfirmationPage(page);
+    for (const entry of representativeEntries) {
+      logEarlyReturn(`Processing representative entry: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
+
+      const udParam = deriveUdParam(entry.date);
+      if (!udParam) {
+        logEarlyReturn(`Skipping entry due to invalid date format: ${entry.date}`);
+        continue;
+      }
+
+      const lotUrl = `https://yoyaku.harp.lg.jp/sapporo/?u%5B0%5D=28&ud=${udParam}`;
+      await page.goto(lotUrl, { waitUntil: 'domcontentloaded' });
+      // await runLotRequestPage(page, requestStatusEntries);
+      // await runConfirmationPage(page);
     }
   } catch (error) {
     logEarlyReturn(
@@ -58,28 +68,4 @@ if (executedDirectly) {
     console.error('Fatal error during login flow', error);
     process.exitCode = 1;
   });
-}
-
-async function fetchGroupUrlsAfterLogin(): Promise<string[]> {
-  const groupId = process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID;
-  const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
-
-  if (!groupId) {
-    logEarlyReturn('PLAYWRIGHT_GROUP_ID is not set; skipping Firestore URL fetch.');
-    return [];
-  }
-
-  if (!apiBaseUrl) {
-    logEarlyReturn('PLAYWRIGHT_API_BASE_URL is not set; skipping API fetch.');
-    return [];
-  }
-
-  try {
-    const requestUrl = await fetch(`${apiBaseUrl}/api/groups/urls?groupId=${groupId}`);
-    const data = await requestUrl.json();
-    return data.urls.filter((url: string): url is string => typeof url === 'string' && url.length > 0);
-  } catch (error) {
-    logEarlyReturn(`Failed to fetch group URLs: ${error instanceof Error ? error.message : String(error)}`);
-    return [];
-  }
 }

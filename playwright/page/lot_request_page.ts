@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import { logEarlyReturn } from '../util';
 import type { StatusEntry } from './request_status_page';
 
-const TARGET_URL = 'https://yoyaku.harp.lg.jp/sapporo/LotRequests/';
+export const LOT_REQUEST_URL = 'https://yoyaku.harp.lg.jp/sapporo/LotRequests/';
 
 type LotRequestSlot = {
   datetime: string | null;
@@ -14,7 +14,7 @@ export async function runLotRequestPage(
   page: Page,
   entries: StatusEntry[],
 ): Promise<LotRequestSlot[]> {
-  await page.waitForURL((url) => url.toString().startsWith(TARGET_URL), {timeout: 10_000});
+  await page.waitForURL((url) => url.toString().startsWith(LOT_REQUEST_URL), {timeout: 10_000});
 
   const subtitleLocator = page.locator('div.v-list-item__subtitle');
   const subtitleCount = await subtitleLocator.count();
