@@ -310,16 +310,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
                       loading="lazy"
                     />
                   </div>
-                  <p className="text-[11px] text-stone-500">
-                    <a
-                      href={jobDebugImageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sky-700 underline"
-                    >
-                      debug.png を開く
-                    </a>
-                  </p>
                 </div>
               ) : null}
             </>
