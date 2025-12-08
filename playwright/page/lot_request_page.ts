@@ -8,7 +8,10 @@ export async function runLotRequestPage(
   page: Page,
   entries: RepresentativeEntry[],
 ): Promise<void> {
-  await page.waitForURL((url) => url.toString().startsWith(LOT_REQUEST_URL), {timeout: 10_000});
+  await page.waitForURL((url) => url.toString().startsWith(LOT_REQUEST_URL), {
+    timeout: 10_000,
+    waitUntil: 'domcontentloaded',
+  });
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
 
   await new Promise(resolve => setTimeout(resolve, 3_000));

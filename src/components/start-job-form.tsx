@@ -98,10 +98,10 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
           if (workflowResponse.ok) {
             const workflowData = (await workflowResponse
               .json()
-              .catch(() => null)) as { actions_url?: string | null } | null;
+              .catch(() => null)) as { actions_url?: string | null; job_url?: string | null } | null;
 
-            if (workflowData?.actions_url) {
-              setJobHtmlUrl(workflowData.actions_url);
+            if (workflowData?.job_url || workflowData?.actions_url) {
+              setJobHtmlUrl(workflowData.job_url || workflowData.actions_url || null);
             }
           }
         } catch (error) {
@@ -280,7 +280,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
           ) : null}
         </form>
       ) : (
-        <div className="space-y-3 rounded-3xl border border-stone-200 bg-white/80 p-8 text-center shadow-sm">
+        <div className="space-y-4 rounded-3xl border border-stone-200 bg-white/80 p-8 text-center shadow-sm">
           {jobResult?.status === "success" ? (
             <>
               <p className="text-lg font-semibold text-stone-900">抽選応募完了！</p>
@@ -291,6 +291,19 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               <p className="text-lg font-semibold text-red-600">応募が失敗しました (failed)</p>
               <p className="text-base text-stone-600">{jobResult?.message ?? "何らかのエラーが発生しました。"}</p>
             </>
+          )}
+
+          {jobHtmlUrl && (
+            <p className="text-xs">
+              <a
+                href={jobHtmlUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-700 underline"
+              >
+                GitHub Actions の進行状況はこちら
+              </a>
+            </p>
           )}
         </div>
       )}
