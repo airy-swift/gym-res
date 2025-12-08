@@ -5,15 +5,6 @@ import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 
-const GITHUB_OWNER =
-  process.env.NEXT_PUBLIC_GITHUB_OWNER ??
-  process.env.NEXT_PUBLIC_GITHUB_REPOSITORY?.split("/")?.[0] ??
-  null;
-const GITHUB_REPO =
-  process.env.NEXT_PUBLIC_GITHUB_REPO ??
-  process.env.NEXT_PUBLIC_GITHUB_REPOSITORY?.split("/")?.[1] ??
-  null;
-
 type StartJobFormProps = {
   entryOptions: number[];
   groupId: string;
@@ -319,6 +310,16 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
                       loading="lazy"
                     />
                   </div>
+                  <p className="text-[11px] text-stone-500">
+                    <a
+                      href={jobDebugImageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sky-700 underline"
+                    >
+                      debug.png を開く
+                    </a>
+                  </p>
                 </div>
               ) : null}
             </>
@@ -369,10 +370,6 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
 }
 
 function buildDebugImageUrl(jobId: string | null): string | null {
-  if (!jobId || !GITHUB_OWNER || !GITHUB_REPO) {
-    return null;
-  }
-
   const cacheBust = Date.now();
-  return `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${jobId}/playwright/debug.png?ts=${cacheBust}`;
+  return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/debug.png?ts=${cacheBust}`;
 }
