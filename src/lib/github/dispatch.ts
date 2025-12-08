@@ -20,26 +20,7 @@ const baseHeaders = {
   Accept: 'application/vnd.github+json',
 };
 
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-async function fetchLatestWorkflowRunUrl(): Promise<string | undefined> {
-  const runsEndpoint = `https://api.github.com/repos/${workflowRepo}/actions/workflows/${workflowFile}/runs?per_page=1`;
-  const response = await fetch(runsEndpoint, {
-    method: 'GET',
-    headers: baseHeaders,
-  });
-
-  if (!response.ok) {
-    const payload = await response.text();
-    console.error('Failed to fetch workflow runs', response.status, payload);
-    return undefined;
-  }
-
-  const data = (await response.json()) as { workflow_runs?: Array<{ html_url?: string }> };
-  return data.workflow_runs?.[0]?.html_url;
-}
-
-export async function dispatchJobWorkflow(jobId: string): Promise<string | undefined> {
+export async function dispatchJobWorkflow(jobId: string): Promise<void> {
   assertWorkflowConfig();
 
   const endpoint = `https://api.github.com/repos/${workflowRepo}/actions/workflows/${workflowFile}/dispatches`;
@@ -56,7 +37,23 @@ export async function dispatchJobWorkflow(jobId: string): Promise<string | undef
     const payload = await response.text();
     throw new Error(`Workflow dispatch failed: ${response.status} ${response.statusText} ${payload}`);
   }
+}
 
-  await sleep(400);
-  return fetchLatestWorkflowRunUrl();
+export async function getLatestWorkflowActionsUrl(): Promise<string | undefined> {
+  assertWorkflowConfig();
+
+  const runsEndpoint = `https://api.github.com/repos/${workflowRepo}/actions/workflows/${workflowFile}/runs?per_page=1`;
+  const response = await fetch(runsEndpoint, {
+    method: 'GET',
+    headers: baseHeaders,
+  });
+
+  if (!response.ok) {
+    const payload = await response.text();
+    console.error('Failed to fetch workflow runs', response.status, payload);
+    return undefined;
+  }
+
+  const data = (await response.json()) as { workflow_runs?: Array<{ html_url?: string }> };
+  return data.workflow_runs?.[0]?.html_url;
 }

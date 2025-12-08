@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
@@ -22,6 +22,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
   const [jobResult, setJobResult] = useState<{ status: string; message: string | null } | null>(null);
   const [jobHtmlUrl, setJobHtmlUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const workflowLinkTimeoutRef = useRef<number | null>(null);
 
   const firestore = useMemo(() => getFirestoreDb(), []);
 
@@ -40,6 +41,10 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
     setFeedback(null);
     setIsError(false);
     setJobHtmlUrl(null);
+    if (workflowLinkTimeoutRef.current !== null) {
+      window.clearTimeout(workflowLinkTimeoutRef.current);
+      workflowLinkTimeoutRef.current = null;
+    }
 
     try {
       const response = await fetch("/api/jobs", {
@@ -73,7 +78,7 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
 
       const data = (await response
         .json()
-        .catch(() => null)) as { jobId?: string; html_url?: string | null } | null;
+        .catch(() => null)) as { jobId?: string } | null;
 
       if (!data?.jobId) {
         throw new Error("Missing jobId from server response");
@@ -81,9 +86,27 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
 
       setJobId(data.jobId);
       setJobStatus("pending");
-      setJobHtmlUrl(data.html_url ?? null);
+      setJobHtmlUrl(null);
       setJobResult(null);
       setPassword("");
+
+      workflowLinkTimeoutRef.current = window.setTimeout(async () => {
+        try {
+          const workflowResponse = await fetch("/api/internal/workflow");
+
+          if (workflowResponse.ok) {
+            const workflowData = (await workflowResponse
+              .json()
+              .catch(() => null)) as { actions_url?: string | null } | null;
+
+            if (workflowData?.actions_url) {
+              setJobHtmlUrl(workflowData.actions_url);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch latest workflow URL", error);
+        }
+      }, 1200);
     } catch (error) {
       console.error("Failed to start job", error);
       setIsError(true);
@@ -183,6 +206,10 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
           setJobResult({ status, message });
           setJobId(null);
           setJobHtmlUrl(null);
+          if (workflowLinkTimeoutRef.current !== null) {
+            window.clearTimeout(workflowLinkTimeoutRef.current);
+            workflowLinkTimeoutRef.current = null;
+          }
         }
       },
       (error) => {
@@ -194,6 +221,14 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
       unsubscribe();
     };
   }, [firestore, jobId]);
+
+  useEffect(() => {
+    return () => {
+      if (workflowLinkTimeoutRef.current !== null) {
+        window.clearTimeout(workflowLinkTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const isJobPending = jobStatus === "pending";
   const shouldShowForm = !jobResult;
@@ -291,8 +326,8 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
             <p className="mt-2 text-xs text-stone-700">
               ページ閉じても実行されるけど応募完了/エラーは分かんなくなるよ！札幌予約管理システムからの応募完了メールに期待して！
             </p>
-            {jobHtmlUrl ? (
-              <p className="mt-4 text-xs font-semibold">
+            <div className="mt-4 text-xs font-semibold">
+              {jobHtmlUrl ? (
                 <a
                   href={jobHtmlUrl}
                   target="_blank"
@@ -301,8 +336,10 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
                 >
                   進行状況
                 </a>
-              </p>
-            ) : null}
+              ) : (
+                <span className="text-stone-400">進行状況 (取得中...)</span>
+              )}
+            </div>
           </div>
         </div>
       ) : null}

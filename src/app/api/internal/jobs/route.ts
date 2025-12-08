@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import { randomUUID } from 'node:crypto';
 
 import { getFirestoreDb } from '@/lib/firebase/app';
-import { markJobAsFailed } from '@/lib/api/internal-jobs';
 import { dispatchJobWorkflow } from '@/lib/github/dispatch';
-import { randomUUID } from 'node:crypto';
+import { markJobAsFailed } from '@/lib/api/internal-jobs';
 
 export async function POST(request: NextRequest) {
   const db = getFirestoreDb();
@@ -38,10 +38,8 @@ export async function POST(request: NextRequest) {
       entryCount,
     });
 
-    let workflowUrl: string | undefined;
-
     try {
-      workflowUrl = await dispatchJobWorkflow(jobId);
+      await dispatchJobWorkflow(jobId);
     } catch (dispatchError) {
       console.error('GitHub Actions dispatch failed', dispatchError);
 
@@ -54,7 +52,7 @@ export async function POST(request: NextRequest) {
       throw dispatchError;
     }
 
-    return NextResponse.json({ jobId, html_url: workflowUrl }, { status: 201 });
+    return NextResponse.json({ jobId }, { status: 201 });
   } catch (error) {
     console.error('Failed to create job', error);
     return NextResponse.json({ error: 'Failed to create job' }, { status: 500 });
