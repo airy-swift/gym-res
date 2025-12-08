@@ -25,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           JOB_JSON=$(curl -sSf -G "$API_BASE_URL/api/jobs" \
-            -H "Authorization: Bearer $API_TOKEN" \
+            -H "API_TOKEN: $API_TOKEN" \
             --data-urlencode "jobId=$JOB_ID" \
             -H 'Accept: application/json')
 
@@ -81,7 +81,7 @@ jobs:
 
           curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
             -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $API_TOKEN" \
+            -H "API_TOKEN: $API_TOKEN" \
             -d "$PAYLOAD"
 
       - name: Update job status on success
@@ -96,5 +96,5 @@ jobs:
 
           curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
             -H 'Content-Type: application/json' \
-            -H "Authorization: Bearer $API_TOKEN" \
+            -H "API_TOKEN: $API_TOKEN" \
             -d "$PAYLOAD"

@@ -30,7 +30,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               href={representativeHref}
               className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-stone-700 transition hover:border-stone-900/30 hover:text-stone-900"
             >
-              代表者向け
+              代表者向けページはこちら
             </Link>
           </div>
           <div className="border-l-4 border-stone-400/70 pl-6">

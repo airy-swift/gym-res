@@ -3,8 +3,13 @@ import { deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'fi
 import { randomUUID } from 'node:crypto';
 
 import { getFirestoreDb } from '@/lib/firebase/app';
+import { isAuthorizedRequest } from '@/lib/api/auth';
 
 export async function POST(request: NextRequest) {
+  // if (!isAuthorizedRequest(request)) {
+  //   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  // }
+
   const db = getFirestoreDb();
   const jobId = randomUUID().replace(/-/g, '');
   let body: { userId?: string; password?: string; entryCount?: number };
@@ -44,6 +49,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  if (!isAuthorizedRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const db = getFirestoreDb();
   const jobId = request.nextUrl.searchParams.get('jobId');
 
@@ -66,6 +75,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  if (!isAuthorizedRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   const db = getFirestoreDb();
 
   let body: { jobId?: string; status?: string; message?: string };
