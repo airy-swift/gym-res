@@ -56,7 +56,7 @@ jobs:
           ENTRY_COUNT="$ENTRY_COUNT" \
           npm install
           npx playwright install --with-deps
-          npm run play 2>&1 | tee play.log
+          xvfb-run -a npm run play 2>&1 | tee play.log
         working-directory: playwright
         continue-on-error: true
 
