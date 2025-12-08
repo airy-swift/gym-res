@@ -54,7 +54,9 @@ jobs:
           SERVICE_USER="$SERVICE_USER" \
           SERVICE_PASS="$SERVICE_PASS" \
           ENTRY_COUNT="$ENTRY_COUNT" \
+          npm install
           npm run play 2>&1 | tee play.log
+        working-directory: playwright
         continue-on-error: true
 
       - name: Build error summary
