@@ -52,6 +52,8 @@ jobs:
           SERVICE_PASS="$SERVICE_PASS" \
           ENTRY_COUNT="$ENTRY_COUNT" \
           npm run play 2>&1 | tee play.log
+        working-directory: playwright
+        continue-on-error: true
 
       - name: Build error summary
         if: always()

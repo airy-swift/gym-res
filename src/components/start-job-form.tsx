@@ -53,9 +53,19 @@ export function StartJobForm({ entryOptions, className }: StartJobFormProps) {
       });
 
       if (!response.ok) {
-        const data = await response.json().catch(() => ({ error: "エラーが発生しました" }));
+        const rawBody = await response.text();
+        let errorMessage = "応募に失敗しました";
+        try {
+          const data = JSON.parse(rawBody) as { error?: string };
+          errorMessage = (data.error ?? rawBody) || errorMessage;
+        } catch {
+          if (rawBody) {
+            errorMessage = rawBody;
+          }
+        }
+
         setIsError(true);
-        setFeedback(data.error ?? "応募に失敗しました");
+        setFeedback(errorMessage);
         return;
       }
 
