@@ -9,11 +9,12 @@ export async function runSeekLotPage(
 ): Promise<{count: number, entry: RepresentativeEntry}[] | undefined> {
     await page.waitForURL(url => url.toString().startsWith('https://yoyaku.harp.lg.jp/sapporo/FacilityAvailability/Index'), {timeout: 10_000,});
     await waitForTutorial(page);
+    await new Promise(resolve => setTimeout(resolve, 1_000));
 
     await page.locator('button.AvailabilityFrameSet_frame_content.is-lot').first().waitFor({ state: 'visible', timeout: 10_000 });
     await new Promise(resolve => setTimeout(resolve, 1_000));
     const lotterySlots = page.locator('button.AvailabilityFrameSet_frame_content.is-lot');
-
+    
     let results: {count: number, entry: RepresentativeEntry}[] = [];
 
     const count = await lotterySlots.count();
@@ -39,8 +40,16 @@ export async function runSeekLotPage(
       const lotteryCount = Number(countText.trim());
       const gymName = await page.locator('a.h-ctDeep.headline').innerText();
       const roomName = await page.locator('button.SearchForm_simple_condition span.InputContainer').innerText();
-      const boothLocator = slot.locator('xpath=ancestor::tr/th//span.v-btn__content');
-      const boothName = (await boothLocator.count()) > 0 ? ` / ${(await boothLocator.innerText()).trim()}` : '';
+      const boothName = await slot.evaluate(el => {
+        const tr = el.closest('tr');
+        const name = tr
+          ?.querySelector('th .v-btn__content')
+          ?.textContent
+          ?.trim();
+        return name ? ` / ${name}` : '';
+      });
+      
+      
       results.push({
         count: lotteryCount,
         entry: {

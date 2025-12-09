@@ -15,6 +15,7 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   // if (!booth) {
   //   booth = room;
   // }
+  // 時間測りたい
   const matchingRowIndex = await getMatchingRow(page, room);
   const lotterySlots = await getLotterySlots(page, matchingRowIndex, booth);
 
@@ -44,42 +45,74 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   await handlePossibleErrors(page);
 }
 
-
 // trの見出しから選択するrowを取り出したい
 async function getMatchingRow(page: Page, room: string): Promise<number> {
-  const roomButtons = page.locator('button.AvailabilityFrames_textBtn .v-btn__content');
-  const pageRoomTexts = await roomButtons.allInnerTexts();
-  const matchingPageRoom = pageRoomTexts.filter((text: string) => text === room).at(0);
-  if (!matchingPageRoom) {
-    throwLoggedError('[runFacilityAvailabilityPage:No.3] 施設一覧に一致する部屋名が見つかりませんでした。');
+  const index = await page
+    .locator('table.AvailabilityFrames_gridTable tr')
+    .evaluateAll((trs, roomText) => {
+      const target = (roomText ?? '').trim();
+
+      for (let i = 0; i < trs.length; i++) {
+        const tr = trs[i] as HTMLTableRowElement;
+        const btn = tr.querySelector(
+          'button.AvailabilityFrames_textBtn .v-btn__content'
+        );
+        if (!btn) continue;
+
+        const label = (btn.textContent ?? '').trim();
+        if (label === target) {
+          return i;
+        }
+      }
+
+      return -1;
+    }, room);
+
+  if (index === -1) {
+    throwLoggedError(
+      '[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。'
+    );
   }
 
-  const rows = page.locator('table.AvailabilityFrames_gridTable tr');
-  const rowCount = await rows.count();
-  const normalize = (value?: string) => value?.trim() ?? '';
-  let matchingRowIndex = -1;
-  let matchingRow: Locator | undefined;
-
-  for (let i = 0; i < rowCount; i += 1) {
-    const row = rows.nth(i);
-    const rowLabel = await row
-      .locator('button.AvailabilityFrames_textBtn .v-btn__content')
-      .first()
-      .innerText()
-      .catch(() => undefined);
-    if (normalize(rowLabel) === normalize(matchingPageRoom)) {
-      matchingRow = row;
-      matchingRowIndex = i;
-      break;
-    }
-  }
-
-  if (!matchingRow || matchingRowIndex === -1) {
-    throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
-  }
-
-  return matchingRowIndex;
+  return index;
 }
+
+
+// // trの見出しから選択するrowを取り出したい
+// async function getMatchingRow(page: Page, room: string): Promise<number> {
+//   const roomButtons = page.locator('button.AvailabilityFrames_textBtn .v-btn__content');
+//   const pageRoomTexts = await roomButtons.allInnerTexts();
+//   const matchingPageRoom = pageRoomTexts.filter((text: string) => text === room).at(0);
+//   if (!matchingPageRoom) {
+//     throwLoggedError('[runFacilityAvailabilityPage:No.3] 施設一覧に一致する部屋名が見つかりませんでした。');
+//   }
+
+//   const rows = page.locator('table.AvailabilityFrames_gridTable tr');
+//   const rowCount = await rows.count();
+//   const normalize = (value?: string) => value?.trim() ?? '';
+//   let matchingRowIndex = -1;
+//   let matchingRow: Locator | undefined;
+
+//   for (let i = 0; i < rowCount; i += 1) {
+//     const row = rows.nth(i);
+//     const rowLabel = await row
+//       .locator('button.AvailabilityFrames_textBtn .v-btn__content')
+//       .first()
+//       .innerText()
+//       .catch(() => undefined);
+//     if (normalize(rowLabel) === normalize(matchingPageRoom)) {
+//       matchingRow = row;
+//       matchingRowIndex = i;
+//       break;
+//     }
+//   }
+
+//   if (!matchingRow || matchingRowIndex === -1) {
+//     throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
+//   }
+
+//   return matchingRowIndex;
+// }
 
 // 
 async function getLotterySlots(page: Page, matchingRowIndex: number, booth?: string): Promise<Array<Locator>> {

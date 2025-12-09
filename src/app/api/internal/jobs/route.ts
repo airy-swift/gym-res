@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       status: 'pending',
       message: 'Job created',
       createdAt: serverTimestamp(),
-      progress: '準備！(2分) + 1件あたり1分弱',
+      progress: '準備！(2分) + 1件あたり30秒程',
       userId,
       password,
       entryCount,

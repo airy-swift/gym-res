@@ -46,11 +46,14 @@ export async function main(): Promise<void> {
     // 代表が予約して欲しい枠
     let representativeEntries = await fetchRepresentativeEntries();
     if (jobEntryCount !== null) {
-      console.log('jobEntryCount', jobEntryCount);
-      await updateJobProgress(`追加分の探索中...`);
-      const additionalEntries = await runSeekLotComparePage(page, jobEntryCount);
-      representativeEntries = [...representativeEntries, ...additionalEntries];
-      console.log(representativeEntries);
+      if (jobEntryCount - representativeEntries.length > 0) {
+        await updateJobProgress(`追加分の探索中...`);
+        const additionalEntries = await runSeekLotComparePage(page, jobEntryCount);
+        representativeEntries = [...representativeEntries, ...additionalEntries];
+      } else {
+        representativeEntries = representativeEntries.slice(0, jobEntryCount);
+      }
+      console.log('応募先の枠: ', representativeEntries);
     }
 
     const totalEntries = representativeEntries.length;

@@ -58,6 +58,7 @@ export async function runSeekLotComparePage(
         await detailPage.close();
       }
       if (results?.length) {
+        results.forEach(({count, entry}) => console.log('応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time));
         results
           .slice() // 元配列を壊さない
           .sort((a, b) => a.count - b.count) // count 昇順
@@ -67,14 +68,19 @@ export async function runSeekLotComparePage(
               .some(e => entriesAreEqual(e, entry));
       
             if (!exists) {
-              console.log(count);
               result.enqueue(entry);
             }
           });
       }
       }
     }
-  return result.toArray();
+
+  return result
+    .toArray()
+    .map(entry => ({
+      ...entry,
+      date: formatJapaneseDate(entry.date),
+    }));
 }
 
 function buildAbsoluteUrl(href: string): string {
@@ -84,4 +90,21 @@ function buildAbsoluteUrl(href: string): string {
     console.warn('Failed to build absolute URL for lot link', href, error);
     return 'https://yoyaku.harp.lg.jp';
   }
+}
+
+function formatJapaneseDate(rawDate: string): string {
+  const [yearPart, monthPart, dayPart] = rawDate.split('-');
+  const year = Number(yearPart);
+  const month = Number(monthPart);
+  const day = Number(dayPart);
+  if (!year || !month || !day) {
+    return rawDate;
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // Convert to JST to ensure weekday matches local calendar.
+  const jstTimestamp = new Date(date.getTime() + (9 * 60 * 60 * 1000));
+  const weekday = ['日', '月', '火', '水', '木', '金', '土'][jstTimestamp.getUTCDay()];
+
+  return `${year}年${month}月${day}日(${weekday})`;
 }
