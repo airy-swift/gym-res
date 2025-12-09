@@ -109,7 +109,7 @@ async function getLotterySlots(page: Page, matchingRowIndex: number, booth?: str
   }
 
   if (!targetRow) {
-    throwLoggedError('[runFacilityAvailabilityPage:No.3] 希望するブース行を特定できませんでした。');
+    throwLoggedError(`[runFacilityAvailabilityPage:No.3] 希望するブース行を特定できませんでした。${booth}, ${matchingRowIndex}`);
   }
 
   const lotteryButtons = targetRow.locator('button[title$="抽選申込可"]');
