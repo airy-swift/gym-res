@@ -327,6 +327,16 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               </a>
             </p>
           )}
+            <p className="text-lg">
+              <a
+                href={'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20'}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-700 underline"
+              >
+                申し込み状況 (→札幌公共施設予約管理システム)
+              </a>
+            </p>
         </div>
       )}
 
