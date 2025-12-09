@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ボブ太郎",
-  description: "ボブ太郎は、抽選応募について共有・応募への簡潔さを提供します。",
+  title: "ボブ太郎システム",
+  description: "ボブ太郎システムは、抽選応募について共有・応募への簡潔さを提供します。",
 };
 
 export default function RootLayout({
