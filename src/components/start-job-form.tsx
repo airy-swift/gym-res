@@ -21,6 +21,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobResult, setJobResult] = useState<{ status: string; message: string | null } | null>(null);
   const [jobHtmlUrl, setJobHtmlUrl] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<string | null>(null);
   const [jobDebugImageUrl, setJobDebugImageUrl] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
@@ -43,6 +44,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     setFeedback(null);
     setIsError(false);
     setJobHtmlUrl(null);
+    setJobProgress('準備してます');
     setJobDebugImageUrl(null);
     if (workflowLinkTimeoutRef.current !== null) {
       window.clearTimeout(workflowLinkTimeoutRef.current);
@@ -196,11 +198,13 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
           return;
         }
 
-        const data = snapshot.data() as { status?: string; message?: string | null } | undefined;
+        const data = snapshot.data() as { status?: string; message?: string | null; progress?: string | null } | undefined;
         const status = data?.status ?? null;
         const message = data?.message ?? null;
+        const progress = typeof data?.progress === 'string' ? data?.progress : null;
 
         setJobStatus(status);
+        setJobProgress(progress ?? null);
 
         if (status && status !== "pending") {
           setJobResult({ status, message });
@@ -344,7 +348,12 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur">
           <div className="w-full max-w-xs rounded-[32px] border border-white/40 bg-white/90 px-8 py-10 text-center text-stone-900 shadow-2xl">
             <span className="mx-auto mb-4 block h-12 w-12 animate-spin rounded-full border-4 border-stone-200 border-t-sky-600" />
-            <p className="text-sm font-semibold">応募中...</p>
+            <p className="text-sm font-semibold">
+              応募中...
+              {jobProgress ? (
+                <span className="ml-1 text-xs text-stone-500">({jobProgress})</span>
+              ) : null}
+            </p>
             <p className="mt-2 text-xs text-stone-700">
               ページ閉じても実行されるけど応募完了/エラーは分かんなくなるよ！札幌予約管理システムからの応募完了メールに期待して！
             </p>

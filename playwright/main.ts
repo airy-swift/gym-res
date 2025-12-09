@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { captureScreenshot, fetchRepresentativeEntries, logEarlyReturn } from './util';
+import { captureScreenshot, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
@@ -41,12 +41,12 @@ export async function main(): Promise<void> {
 
     // 代表が予約して欲しい枠
     const representativeEntries = await fetchRepresentativeEntries();
+    const totalEntries = representativeEntries.length;
+    await updateJobProgress(`${0}/${totalEntries}件`);
 
     // 今のアカウントが既に応募済みの枠
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const requestStatusEntries = await ensureRequestStatusPage(page);
-    console.log('requestStatusEntries', requestStatusEntries);
-    console.log('representativeEntries', representativeEntries);
 
     const pendingEntries = representativeEntries.filter(entry => {
       const normalizedEntry = normalizeEntry(entry);
@@ -66,6 +66,9 @@ export async function main(): Promise<void> {
       }
       return true;
     });
+
+    let processedCount = skippedCount;
+    await updateJobProgress(`${Math.min(processedCount, totalEntries)}/${totalEntries}件`);
 
     for (let index = 0; index < pendingEntries.length; index += 1) {
       const entry = pendingEntries[index];
@@ -94,6 +97,9 @@ export async function main(): Promise<void> {
       if (index < pendingEntries.length - 1) {
         await page.waitForTimeout(5_000);
       }
+
+      processedCount += 1;
+      await updateJobProgress(`${Math.min(processedCount, totalEntries)}/${totalEntries}件`);
     }
 
     if (successEntries.length > 0 || failedEntries.length > 0) {

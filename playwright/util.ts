@@ -57,6 +57,41 @@ export async function fetchRepresentativeEntries(): Promise<RepresentativeEntry[
   }
 }
 
+export async function updateJobProgress(progress: string): Promise<void> {
+  const jobId = process.env.JOB_ID;
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!jobId) {
+    logEarlyReturn('JOB_ID is not set; skipping progress update.');
+    return;
+  }
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping progress update.');
+    return;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/jobs/progress`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        API_TOKEN: apiToken,
+      },
+      body: JSON.stringify({ jobId, progress }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to update job progress (status ${response.status}): ${text}`);
+    }
+  } catch (error) {
+    logEarlyReturn(`Failed to update job progress: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export function deriveUdParam(dateText: string): string | null {
   const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   if (!match) {
