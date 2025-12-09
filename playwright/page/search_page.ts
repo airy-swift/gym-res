@@ -11,6 +11,9 @@ export async function runSearchPage(page: Page, entry: RepresentativeEntry): Pro
     throwLoggedError(`[runSearchPage:No.1] 日付の形式が不正なため検索を続行できません: ${entry.date}`);
   }
   await page.goto(`${LOT_SEARCH_URL}${udParam}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForURL(url => url.toString().startsWith(LOT_SEARCH_URL), {
+    timeout: 10_000,
+  });
 
   const keyword = entry.gymName?.trim() ?? '';
   if (!keyword) {

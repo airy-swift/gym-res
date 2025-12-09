@@ -54,6 +54,7 @@ export async function main(): Promise<void> {
       );
       if (exists) {
         skippedCount += 1;
+        console.log(`Skipped entry: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
       }
       return !exists;
     });
@@ -83,7 +84,7 @@ export async function main(): Promise<void> {
       }
 
       if (index < pendingEntries.length - 1) {
-        await page.waitForTimeout(8_000);
+        await page.waitForTimeout(5_000);
       }
     }
 
