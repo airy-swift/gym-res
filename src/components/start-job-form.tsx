@@ -283,7 +283,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
             <label htmlFor="entryCount" className="text-sm font-medium text-stone-600">
               抽選応募個数
             </label>
-            <p className="text-xs text-stone-500">
+            <p className="text-xs text-stone-700">
               (代表の指定数より多い場合、全体から最小応募数を探して追加応募します。時間かかります。)
             </p>
             <select
