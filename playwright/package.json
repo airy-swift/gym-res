@@ -8,7 +8,8 @@
     "play": "tsx main.ts"
   },
   "dependencies": {
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "japanese-holidays": "^1.0.10"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
