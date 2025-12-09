@@ -16,6 +16,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "firebase": "^12.5.0",
+    "japanese-holidays": "^1.0.10",
     "next": "^16.0.7",
     "react": "19.2.0",
     "react-dom": "19.2.0"

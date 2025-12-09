@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 
 import type { RepresentativeEntry } from '../types';
 import { waitForTutorial } from '../util';
+import JapaneseHolidays from 'japanese-holidays';
 
 export async function runSeekLotPage(
   page: Page,
@@ -28,8 +29,19 @@ export async function runSeekLotPage(
     
       // start/end 例: "2026-01-04 09:00:00"
       const date = start!.split(' ')[0];
-      const startTime = toHourMinute(start!.split(' ')[1].slice(0, 5));
+      const startTimeRaw = start!.split(' ')[1].slice(0, 5);
       const endTime = toHourMinute(end!.split(' ')[1].slice(0, 5));
+      const startHour = Number(startTimeRaw.split(':')[0]);
+      const jsDate = getDate(date);
+      const isHoliday = Boolean(JapaneseHolidays.isHoliday(jsDate, true));
+      const isWeekday = !isHoliday && jsDate.getDay() >= 1 && jsDate.getDay() <= 5;
+
+      // Skip weekday slots that start before 18:00
+      if (isWeekday && startHour < 18) {
+        continue;
+      }
+
+      const startTime = toHourMinute(startTimeRaw);
       const timeRange = `${startTime}-${endTime}`;
     
       // --- lottery 数（IconTextContainer_text） ---
@@ -68,5 +80,10 @@ function toHourMinute(value: string): string {
   const [hour, minute] = value.split(':');
   const normalizedHour = String(Number(hour));
   return `${normalizedHour}:${minute}`;
+}
+
+function getDate(isoDate: string): Date {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year!, month! - 1, day!);
 }
   
