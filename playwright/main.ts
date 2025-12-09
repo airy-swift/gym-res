@@ -181,7 +181,7 @@ async function persistLogFile(
   failedEntries: RepresentativeEntry[],
   skippedCount: number,
 ): Promise<void> {
-  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`;
+  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件\n\n`;
   const failureLines = failedEntries.length > 0
     ? failedEntries.map(entry => `失敗: ${formatEntry(entry)}`)
     : ['失敗はありませんでした。'];
