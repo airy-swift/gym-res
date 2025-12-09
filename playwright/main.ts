@@ -49,7 +49,7 @@ export async function main(): Promise<void> {
     if (jobEntryCount !== null) {
       if (jobEntryCount - representativeEntries.length > 0) {
         await updateJobProgress(`追加分の探索中...`);
-        const additionalEntries = await runSeekLotComparePage(page, jobEntryCount);
+        const additionalEntries = await runSeekLotComparePage(page, jobEntryCount - representativeEntries.length);
         representativeEntries = [...representativeEntries, ...additionalEntries];
       } else {
         representativeEntries = representativeEntries.slice(0, jobEntryCount);

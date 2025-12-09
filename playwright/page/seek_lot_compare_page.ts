@@ -19,7 +19,7 @@ export async function runSeekLotComparePage(
   page: Page,
   desiredCount: number,
 ): Promise<RepresentativeEntry[]> {
-  let result: FixedQueue<RepresentativeEntry> = new FixedQueue<RepresentativeEntry>(desiredCount);
+  const results: { count: number; entry: RepresentativeEntry }[] = [];
   const now = new Date();
   const jstTimestamp = new Date(now.toLocaleString('en-US', { timeZone: JST_TIMEZONE }));
   const nextMonthReference = new Date(jstTimestamp);
@@ -43,7 +43,7 @@ export async function runSeekLotComparePage(
     const lotteryLinks = page.locator('a.AvailabilityFrames_dayFrame_content.is-lot');
     const count = await lotteryLinks.count();
     
-    for (let j = 0; j < count; j++) {
+    for (let j = 0; j < 5; j++) {
       const lotteryLink = lotteryLinks.nth(j);
       const href = await lotteryLink.getAttribute('href');
       if (!href) {
@@ -51,34 +51,51 @@ export async function runSeekLotComparePage(
       }
       const targetUrl = buildAbsoluteUrl(href);
       const detailPage = await page.context().newPage();
-      let results: {count: number, entry: RepresentativeEntry}[] | undefined;
+      let seekLots: {count: number, entry: RepresentativeEntry}[] | undefined;
       try {
         await detailPage.goto(targetUrl, { waitUntil: 'domcontentloaded' });
-        results = await runSeekLotPage(detailPage, targetUrl);
+        seekLots = await runSeekLotPage(detailPage, targetUrl);
       } finally {
         await detailPage.close();
       }
-      if (results?.length) {
-        results.forEach(({count, entry}) => console.log('応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time));
-        results
-          .slice() // 元配列を壊さない
-          .sort((a, b) => a.count - b.count) // count 昇順
+      if (seekLots?.length) {
+        seekLots
+          .slice()
+          .sort((a, b) => a.count - b.count) // count 昇順で見る
           .forEach(({ count, entry }) => {
-            const exists = result
-              .toArray()
-              .some(e => entriesAreEqual(e, entry));
-      
-            if (!exists) {
-              result.enqueue(entry);
+            // すでに同じ entry が入っていればスキップ
+            const alreadyExists = results.some(e => entriesAreEqual(e.entry, entry));
+            if (alreadyExists) return;
+
+            // まだ枠に余裕があるならそのまま入れる
+            if (results.length < desiredCount) {
+              console.log('採用！ 応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time)
+              results.push({ count, entry });
+              return;
+            }
+
+            // いちばん悪い（count が最大）の要素を探す
+            let worstIndex = 0;
+            for (let i = 1; i < results.length; i++) {
+              if (results[i].count > results[worstIndex].count) {
+                worstIndex = i;
+              }
+            }
+            const worst = results[worstIndex];
+
+            // 今の方がマシ（count が小さい）なら入れ替える
+            if (count < worst.count) {
+              console.log('採用！ 応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time)
+              results[worstIndex] = { count, entry };
             }
           });
       }
-      }
     }
-
-  return result
-    .toArray()
-    .map(entry => ({
+  }
+  
+  return results
+    .sort((a, b) => a.count - b.count) // 念のため小さい順に整列
+    .map(({ entry }) => ({
       ...entry,
       date: formatJapaneseDate(entry.date),
     }));
