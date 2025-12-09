@@ -25,6 +25,7 @@ export async function main(): Promise<void> {
   let page: Page | null = null;
   const successEntries: RepresentativeEntry[] = [];
   const failedEntries: RepresentativeEntry[] = [];
+  let skippedCount = 0;
 
   try {
     browser = await chromium.launch({ headless: HEADLESS });
@@ -51,6 +52,9 @@ export async function main(): Promise<void> {
         requested.date === entry.date &&
         requested.time === entry.time,
       );
+      if (exists) {
+        skippedCount += 1;
+      }
       return !exists;
     });
 
@@ -86,6 +90,7 @@ export async function main(): Promise<void> {
       failedEntries.forEach(entry => {
         console.log('FAILED', formatEntry(entry));
       });
+      console.log(`Skipped entries: ${skippedCount}`);
     }
   } catch (error) {
     logEarlyReturn(
@@ -101,7 +106,7 @@ export async function main(): Promise<void> {
       }
     }
     await browser?.close();
-    await persistLogFile(successEntries, failedEntries);
+    await persistLogFile(successEntries, failedEntries, skippedCount);
   }
 }
 
@@ -116,8 +121,9 @@ function formatEntry(entry: RepresentativeEntry): string {
 async function persistLogFile(
   successEntries: RepresentativeEntry[],
   failedEntries: RepresentativeEntry[],
+  skippedCount: number,
 ): Promise<void> {
-  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件`;
+  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`;
   const failureLines = failedEntries.length > 0
     ? failedEntries.map(formatEntry)
     : ['失敗はありませんでした。'];
