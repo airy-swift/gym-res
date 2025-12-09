@@ -14,6 +14,7 @@ type StartJobFormProps = {
 export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [entryCount, setEntryCount] = useState(entryOptions[0] ?? 1);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -60,7 +61,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         body: JSON.stringify({
           userId: loginId,
           password,
-          entryCount: 1,
+          entryCount,
           groupId,
         }),
       });
@@ -182,8 +183,8 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     }
 
     // Keep legacy cookie cleanup for compatibility.
-    writeCookie("startJobEntryCount", "1");
-  }, [isInitialized]);
+    writeCookie("startJobEntryCount", String(entryCount));
+  }, [isInitialized, entryCount]);
 
   useEffect(() => {
     if (!jobId) {
@@ -276,6 +277,28 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="entryCount" className="text-sm font-medium text-stone-600">
+              抽選応募個数
+            </label>
+            <p className="text-xs text-stone-500">
+              (代表の指定数より多い場合、全体から最小応募数を探して追加応募します。時間かかります。)
+            </p>
+            <select
+              id="entryCount"
+              name="entryCount"
+              value={entryCount}
+              onChange={(event) => setEntryCount(Number(event.target.value))}
+              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
+            >
+              {entryOptions.map((num) => (
+                <option key={num} value={num}>
+                  {num}
+                </option>
+              ))}
+            </select>
           </div>
 
           <button
