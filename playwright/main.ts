@@ -14,6 +14,7 @@ import { runSearchPage } from './page/search_page';
 import { runFacilitySearchPage } from './page/facility_search_page';
 import { runFacilityAvailabilityPage } from './page/facility_availability';
 import { runSeekLotComparePage } from './page/seek_lot_compare_page';
+import { sendLineNotification } from './util';
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
 export const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
@@ -142,6 +143,7 @@ export async function main(): Promise<void> {
     }
     await browser?.close();
     await persistLogFile(successEntries, failedEntries, skippedCount);
+    await sendLineNotification(`${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`);
   }
 }
 

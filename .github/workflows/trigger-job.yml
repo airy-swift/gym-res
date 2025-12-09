@@ -13,6 +13,7 @@ jobs:
     env:
       API_BASE_URL: ${{ secrets.API_BASE_URL }}
       API_TOKEN: ${{ secrets.API_TOKEN }}
+      LINE_ACCESS_TOKEN: ${{ secrets.LINE_ACCESS_TOKEN }}
       JOB_ID: ${{ inputs.jobId }}
       JOB_BRANCH: ${{ inputs.jobId }}
     steps:
@@ -37,6 +38,7 @@ jobs:
         run: |
           test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
           test -n "$API_TOKEN" || { echo 'API_TOKEN secret is required'; exit 1; }
+          test -n "$LINE_ACCESS_TOKEN" || { echo 'LINE_ACCESS_TOKEN secret is required'; exit 1; }
           test -n "$JOB_ID" || { echo 'workflow_dispatch input jobId is required'; exit 1; }
 
       - name: Fetch job data
@@ -72,6 +74,7 @@ jobs:
           SERVICE_PASS: ${{ env.SERVICE_PASS }}
           ENTRY_COUNT: ${{ env.ENTRY_COUNT }}
           PLAYWRIGHT_GROUP_ID: ${{ env.PLAYWRIGHT_GROUP_ID }}
+          LINE_ACCESS_TOKEN: ${{ env.LINE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
           SERVICE_USER="$SERVICE_USER" \

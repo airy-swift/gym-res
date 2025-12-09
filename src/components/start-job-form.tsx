@@ -284,7 +284,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               抽選応募個数
             </label>
             <p className="text-xs text-stone-700">
-              (代表の指定数より多い場合、全体から最小応募数を探して追加応募します。追加で10分弱かかるイメージです。)
+              (代表の指定数より多い場合、全体から最小応募数を探して追加応募します。追加で7分程かかるイメージです。)
             </p>
             <select
               id="entryCount"

@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import https from 'node:https';
 
 import type { Job, RepresentativeEntry } from './types';
 
@@ -157,4 +158,76 @@ export async function waitForTutorial(page: Page): Promise<void> {
     await skipButton.first().click();
   }
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
+}
+
+export const sendLineNotification = async (text: string): Promise<void> => {
+  const accessToken = process.env.LINE_ACCESS_TOKEN;
+  if (!accessToken) {
+    logEarlyReturn('LINE_ACCESS_TOKEN is not set; skipping LINE notification.');
+    return;
+  }
+
+  const options = {
+    hostname: 'api.line.me',
+    path: '/v2/bot/message/push',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${accessToken}`,
+    },
+  } satisfies https.RequestOptions;
+
+  const body = JSON.stringify({
+    to: 'Ua90a4bb44681d318279eab45d9269b87',
+    messages: [
+      {
+        type: 'text',
+        text,
+      },
+    ],
+  });
+
+  let attempt = 0;
+  let lastError: Error | null = null;
+  while (attempt < 10) {
+    attempt += 1;
+    try {
+      await postJson(options, body);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (attempt >= 10) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+};
+
+function postJson(options: https.RequestOptions, payload: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const request = https.request(options, response => {
+      const chunks: Array<Buffer> = [];
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      response.on('end', () => {
+        const responseText = Buffer.concat(chunks).toString('utf8');
+        if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) {
+          resolve();
+          return;
+        }
+        reject(new Error(`LINE push failed (${response.statusCode ?? 'unknown'}): ${responseText}`));
+      });
+    });
+
+    request.on('error', error => {
+      reject(error);
+    });
+
+    request.write(payload);
+    request.end();
+  });
 }
