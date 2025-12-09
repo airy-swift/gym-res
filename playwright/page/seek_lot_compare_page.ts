@@ -43,7 +43,7 @@ export async function runSeekLotComparePage(
     const lotteryLinks = page.locator('a.AvailabilityFrames_dayFrame_content.is-lot');
     const count = await lotteryLinks.count();
     
-    for (let j = 0; j < 5; j++) {
+    for (let j = 0; j < count; j++) {
       const lotteryLink = lotteryLinks.nth(j);
       const href = await lotteryLink.getAttribute('href');
       if (!href) {
