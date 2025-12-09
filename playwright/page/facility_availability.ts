@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { throwLoggedError } from '../util';
+import { throwLoggedError, waitForTutorial } from '../util';
 import { RepresentativeEntry } from '../types';
 
 const TARGET_URL = 'https://yoyaku.harp.lg.jp/sapporo/FacilityAvailability/Index';
@@ -8,19 +8,7 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   await page.waitForURL((url) => url.toString().startsWith(TARGET_URL), {
     timeout: 10_000,
   });
-  
-  await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
-  const skipButton = page.getByText('スキップ');
-  let found = false;
-  await skipButton.first()
-    .waitFor({ state: 'visible', timeout: 2_000 })
-    .then(() => { found = true; })
-    .catch(() => { /* 出なかっただけ */ });
-  if (found) {
-    await skipButton.first().click();
-  }
-  await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
-
+  await waitForTutorial(page);
   await new Promise(resolve => setTimeout(resolve, 1_000));
 
   let [room, booth] = entry.room.split('/');

@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { captureScreenshot, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
+import { captureScreenshot, fetchJob, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
@@ -13,6 +13,7 @@ import { ensureRequestStatusPage } from './page/request_status_page';
 import { runSearchPage } from './page/search_page';
 import { runFacilitySearchPage } from './page/facility_search_page';
 import { runFacilityAvailabilityPage } from './page/facility_availability';
+import { runSeekLotComparePage } from './page/seek_lot_compare_page';
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
 export const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
@@ -39,8 +40,19 @@ export async function main(): Promise<void> {
     await runLoginPage(page);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
 
+    const job = await fetchJob();
+    const jobEntryCount = job?.entryCount ?? null;
+
     // 代表が予約して欲しい枠
-    const representativeEntries = await fetchRepresentativeEntries();
+    let representativeEntries = await fetchRepresentativeEntries();
+    if (jobEntryCount !== null) {
+      console.log('jobEntryCount', jobEntryCount);
+      await updateJobProgress(`追加分の探索中...`);
+      const additionalEntries = await runSeekLotComparePage(page, jobEntryCount);
+      representativeEntries = [...representativeEntries, ...additionalEntries];
+      console.log(representativeEntries);
+    }
+
     const totalEntries = representativeEntries.length;
     await updateJobProgress(`${0}/${totalEntries}件`);
 

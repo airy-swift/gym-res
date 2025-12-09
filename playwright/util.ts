@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-import type { RepresentativeEntry } from './types';
+import type { Job, RepresentativeEntry } from './types';
 
 export async function captureScreenshot(page: Page, label: string): Promise<void> {
   await page.screenshot({ path: `${label}.png`, fullPage: true });
@@ -57,6 +57,48 @@ export async function fetchRepresentativeEntries(): Promise<RepresentativeEntry[
   }
 }
 
+export async function fetchJob(): Promise<Job | null> {
+  const jobId = process.env.JOB_ID;
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!jobId) {
+    logEarlyReturn('JOB_ID is not set; skipping job fetch.');
+    return null;
+  }
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping job fetch.');
+    return null;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/jobs?jobId=${jobId}`;
+    const response = await fetch(endpoint, {
+      headers: {
+        API_TOKEN: apiToken,
+      },
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to fetch job (status ${response.status}): ${text}`);
+      return null;
+    }
+
+    const payload = (await response.json()) as Partial<Job>;
+    const entryCount = typeof payload.entryCount === 'number' ? payload.entryCount : undefined;
+
+    return {
+      jobId,
+      entryCount,
+    } satisfies Job;
+  } catch (error) {
+    logEarlyReturn(`Failed to fetch job: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
+}
+
 export async function updateJobProgress(progress: string): Promise<void> {
   const jobId = process.env.JOB_ID;
   const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
@@ -101,4 +143,18 @@ export function deriveUdParam(dateText: string): string | null {
   const formattedMonth = month.padStart(2, '0');
   const formattedDay = day.padStart(2, '0');
   return `${year}-${formattedMonth}-${formattedDay}`;
+}
+
+export async function waitForTutorial(page: Page): Promise<void> {
+  await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
+  const skipButton = page.getByText('スキップ');
+  let found = false;
+  await skipButton.first()
+    .waitFor({ state: 'visible', timeout: 2_000 })
+    .then(() => { found = true; })
+    .catch(() => { /* 出なかっただけ */ });
+  if (found) {
+    await skipButton.first().click();
+  }
+  await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
 }
