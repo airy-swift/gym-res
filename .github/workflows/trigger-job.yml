@@ -93,14 +93,14 @@ jobs:
           fi
 
           {
-            echo "JOB_ERROR_SUMMARY<<'EOF'"
+            echo "JOB_ERROR_SUMMARY<<EOF"
             cat job-error-summary.txt
             echo 'EOF'
           } >> "$GITHUB_ENV"
 
           if [ -f playwright/log.txt ]; then
             {
-              echo "RESERVATION_LOG<<'EOF'"
+              echo "RESERVATION_LOG<<EOF"
               cat playwright/log.txt
               echo 'EOF'
             } >> "$GITHUB_ENV"
