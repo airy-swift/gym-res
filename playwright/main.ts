@@ -58,7 +58,8 @@ export async function main(): Promise<void> {
       return !exists;
     });
 
-    for (const entry of pendingEntries) {
+    for (let index = 0; index < pendingEntries.length; index += 1) {
+      const entry = pendingEntries[index];
       logEarlyReturn(`Processing representative entry: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
 
       try {
@@ -79,6 +80,10 @@ export async function main(): Promise<void> {
         logEarlyReturn(
           `Entry failed (${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}): ${errorMessage}${stackTrace}`,
         );
+      }
+
+      if (index < pendingEntries.length - 1) {
+        await page.waitForTimeout(8_000);
       }
     }
 
