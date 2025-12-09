@@ -202,7 +202,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
           <p className="text-sm font-semibold text-stone-700">抽選応募先 (メンバーがコレを利用したときこのリストのそれぞれに応募します)</p>
 
           {entries.length === 0 ? (
-            <p className="text-sm text-stone-500">まだ解析結果はありません。画像をドロップして取得してください。</p>
+            <p className="text-sm text-stone-500">まだ解析結果はありません。予約画像をドロップして登録してください。</p>
           ) : (
             <ul className="space-y-3 text-sm text-stone-800">
               {entries.map((entry, index) => (
