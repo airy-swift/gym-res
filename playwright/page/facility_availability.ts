@@ -24,9 +24,9 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   await new Promise(resolve => setTimeout(resolve, 1_000));
 
   let [room, booth] = entry.room.split('/');
-  if (!booth) {
-    booth = room;
-  }
+  // if (!booth) {
+  //   booth = room;
+  // }
   const matchingRowIndex = await getMatchingRow(page, room);
   const lotterySlots = await getLotterySlots(page, matchingRowIndex, booth);
 
