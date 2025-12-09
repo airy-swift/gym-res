@@ -51,6 +51,9 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   const applyButton = page.locator('span', { hasText: '抽選申込へ' }).first();
   await applyButton.waitFor({ state: 'visible', timeout: 10_000 });
   await applyButton.click();
+
+  await page.waitForTimeout(1_000);
+  await handlePossibleErrors(page);
 }
 
 
@@ -219,6 +222,21 @@ async function verifySelectionSummary(page: Page, entry: RepresentativeEntry): P
       expectedTime: entry.time,
     });
     throwLoggedError('[runFacilityAvailabilityPage:No.3] 選択済みの日時がリクエスト内容と一致しません。');
+  }
+}
+
+async function handlePossibleErrors(page: Page): Promise<void> {
+  const errorSelectors = [
+    'text=抽選数が利用制限に該当します。',
+    'text=サービス利用時間外です。',
+  ];
+
+  for (const selector of errorSelectors) {
+    const message = page.locator(selector);
+    if (await message.isVisible({ timeout: 500 })) {
+      const text = await message.innerText().catch(() => selector);
+      throwLoggedError(`[runFacilityAvailabilityPage:No.3] エラー検知: ${text}`);
+    }
   }
 }
 

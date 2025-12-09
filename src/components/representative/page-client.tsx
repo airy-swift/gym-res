@@ -28,7 +28,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [entries, setEntries] = useState<RepresentativeEntry[]>(initialEntries);
+  const [entries, setEntries] = useState<RepresentativeEntry[]>(() => sortEntries(initialEntries));
   const [infoMessage, setInfoMessage] = useState<string | null>(
     initialEntries.length > 0 ? "Firestore から読み込みました" : null,
   );
@@ -104,7 +104,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         throw new Error("Geminiの応答を解析できませんでした。");
       }
 
-      const mergedEntries = [...entries, ...parsedEntries];
+      const mergedEntries = sortEntries([...entries, ...parsedEntries]);
 
       await saveEntriesToGroup(groupId, mergedEntries);
 
@@ -173,7 +173,9 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
       return;
     }
 
-    const updatedEntries = entries.map((entry, index) => (index === editingIndex ? editingEntry : entry));
+    const updatedEntries = sortEntries(
+      entries.map((entry, index) => (index === editingIndex ? editingEntry : entry)),
+    );
     await saveEntriesToGroup(groupId, updatedEntries);
     setEntries(updatedEntries);
     setInfoMessage("候補を更新しました");
@@ -355,6 +357,84 @@ async function convertFileToBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+function sortEntries(entries: RepresentativeEntry[]): RepresentativeEntry[] {
+  return [...entries].sort((a, b) => {
+    const dateA = normalizeDate(a.date);
+    const dateB = normalizeDate(b.date);
+
+    if (dateA && dateB) {
+      const diff = dateA.getTime() - dateB.getTime();
+      if (diff !== 0) {
+        return diff;
+      }
+    } else if (dateA) {
+      return -1;
+    } else if (dateB) {
+      return 1;
+    }
+
+    const timeA = normalizeTimeRange(a.time);
+    const timeB = normalizeTimeRange(b.time);
+
+    if (timeA && timeB) {
+      const diff = timeA - timeB;
+      if (diff !== 0) {
+        return diff;
+      }
+    } else if (timeA) {
+      return -1;
+    } else if (timeB) {
+      return 1;
+    }
+
+    return 0;
+  });
+}
+
+function normalizeDate(raw: string | undefined): Date | null {
+  if (!raw) {
+    return null;
+  }
+
+  const yearMatch = raw.match(/(\d{4})年/);
+  const monthMatch = raw.match(/(\d{1,2})月/);
+  const dayMatch = raw.match(/(\d{1,2})日/);
+
+  if (!yearMatch || !monthMatch || !dayMatch) {
+    return null;
+  }
+
+  const year = Number(yearMatch[1]);
+  const month = Number(monthMatch[1]) - 1;
+  const day = Number(dayMatch[1]);
+
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return null;
+  }
+
+  return new Date(year, month, day);
+}
+
+function normalizeTimeRange(raw: string | undefined): number | null {
+  if (!raw) {
+    return null;
+  }
+
+  const match = raw.match(/(\d{1,2}):(\d{2})/);
+  if (!match) {
+    return null;
+  }
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
 }
 
 function extractTextFromGeminiResponse(payload: any): string | null {

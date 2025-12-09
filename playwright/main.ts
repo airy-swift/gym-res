@@ -45,18 +45,26 @@ export async function main(): Promise<void> {
     // 今のアカウントが既に応募済みの枠
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const requestStatusEntries = await ensureRequestStatusPage(page);
+    console.log('requestStatusEntries', requestStatusEntries);
+    console.log('representativeEntries', representativeEntries);
+
     const pendingEntries = representativeEntries.filter(entry => {
-      const exists = requestStatusEntries.some(requested =>
-        requested.gymName === entry.gymName &&
-        requested.room === entry.room &&
-        requested.date === entry.date &&
-        requested.time === entry.time,
-      );
-      if (exists) {
+      const normalizedEntry = normalizeEntry(entry);
+      const matched = requestStatusEntries.find(requested => {
+        const normalizedRequested = normalizeEntry(requested);
+        return (
+          normalizedRequested.gymName === normalizedEntry.gymName &&
+          normalizedRequested.room === normalizedEntry.room &&
+          normalizedRequested.date === normalizedEntry.date &&
+          normalizedRequested.time === normalizedEntry.time
+        );
+      });
+
+      if (matched) {
         skippedCount += 1;
-        console.log(`Skipped entry: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
+        return false;
       }
-      return !exists;
+      return true;
     });
 
     for (let index = 0; index < pendingEntries.length; index += 1) {
@@ -124,6 +132,27 @@ function formatEntry(entry: RepresentativeEntry): string {
   return `${gym} / ${room} / ${date} ${time}`;
 }
 
+function normalizeEntry(entry: RepresentativeEntry): RepresentativeEntry {
+  return {
+    gymName: normalizeText(entry.gymName),
+    room: normalizeText(entry.room),
+    date: normalizeDate(entry.date),
+    time: normalizeText(entry.time),
+  };
+}
+
+const normalizeText = (value?: string | null) => (value ?? '').replace(/\s+/g, '').trim();
+
+function normalizeDate(date: string) {
+  return date
+    .replace(/\s+/g, '')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/年0?/g, '年')
+    .replace(/月0?/g, '月');
+}
+
+
 async function persistLogFile(
   successEntries: RepresentativeEntry[],
   failedEntries: RepresentativeEntry[],
@@ -131,9 +160,14 @@ async function persistLogFile(
 ): Promise<void> {
   const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`;
   const failureLines = failedEntries.length > 0
-    ? failedEntries.map(formatEntry)
+    ? failedEntries.map(entry => `失敗: ${formatEntry(entry)}`)
     : ['失敗はありませんでした。'];
-  const logContent = [summaryLine, ...failureLines].join('\n');
+  const skipMessage = skippedCount > 0 ? '一部の候補は既に予約済みのためスキップしました。' : undefined;
+  const logLines = [summaryLine, ...failureLines];
+  if (skipMessage) {
+    logLines.push(skipMessage);
+  }
+  const logContent = logLines.join('\n');
 
   try {
     await fs.writeFile(LOG_FILE_PATH, logContent, 'utf8');
