@@ -30,6 +30,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const whitelistDoc = await getDoc(doc(db, 'whitelist', userId));
+
+    if (!whitelistDoc.exists()) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+  } catch (error) {
+    console.error('Failed to verify whitelist membership', error);
+    return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+  }
+
+  try {
     await setDoc(doc(db, 'jobs', jobId), {
       status: 'pending',
       message: 'Job created',
