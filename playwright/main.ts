@@ -28,6 +28,7 @@ export async function main(): Promise<void> {
   const successEntries: RepresentativeEntry[] = [];
   const failedEntries: RepresentativeEntry[] = [];
   let skippedCount = 0;
+  let cancelledCount = 0;
   let expectedEntryTotal: number | null = null;
   let totalEntries = 0;
   let screenshotCaptured = false;
@@ -49,13 +50,13 @@ export async function main(): Promise<void> {
     if (expected === null) {
       return;
     }
-    const recorded = successEntries.length + failedEntries.length + skippedCount;
+    const recorded = successEntries.length + failedEntries.length + skippedCount + cancelledCount;
     if (recorded >= expected) {
       return;
     }
     const adjustment = expected - recorded;
-    skippedCount += adjustment;
-    logEarlyReturn(`Adjusted skipped count by ${adjustment} to match expected entries (${expected}).`);
+    cancelledCount += adjustment;
+    logEarlyReturn(`Adjusted cancelled count by ${adjustment} to match expected entries (${expected}).`);
   };
 
   try {
@@ -154,7 +155,7 @@ export async function main(): Promise<void> {
     }
 
     syncResultCounts();
-    if (successEntries.length > 0 || failedEntries.length > 0) {
+    if (successEntries.length > 0 || failedEntries.length > 0 || cancelledCount > 0) {
       console.log('Reservation results summary');
       successEntries.forEach(entry => {
         console.log('SUCCESS', formatEntry(entry));
@@ -163,6 +164,9 @@ export async function main(): Promise<void> {
         console.log('FAILED', formatEntry(entry));
       });
       console.log(`Skipped entries: ${skippedCount}`);
+      if (cancelledCount > 0) {
+        console.log(`Cancelled entries: ${cancelledCount}`);
+      }
     }
   } catch (error) {
     syncResultCounts();
@@ -175,8 +179,8 @@ export async function main(): Promise<void> {
     syncResultCounts();
     await ensureScreenshot();
     await browser?.close();
-    await persistLogFile(successEntries, failedEntries, skippedCount);
-    await sendLineNotification(`${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`);
+    await persistLogFile(successEntries, failedEntries, skippedCount, cancelledCount);
+    await sendLineNotification(`${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件`);
   }
 }
 
@@ -213,15 +217,20 @@ async function persistLogFile(
   successEntries: RepresentativeEntry[],
   failedEntries: RepresentativeEntry[],
   skippedCount: number,
+  cancelledCount: number,
 ): Promise<void> {
-  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件\n\n`;
+  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件\n\n`;
   const failureLines = failedEntries.length > 0
     ? failedEntries.map(entry => `失敗: ${formatEntry(entry)}`)
     : ['失敗はありませんでした。'];
   const skipMessage = skippedCount > 0 ? '一部の候補は既に予約済みのためスキップしました。' : undefined;
+  const cancelMessage = cancelledCount > 0 ? 'ログイン不可などの理由で処理できなかった枠をキャンセルとして計上しました。' : undefined;
   const logLines = [summaryLine, ...failureLines];
   if (skipMessage) {
     logLines.push(skipMessage);
+  }
+  if (cancelMessage) {
+    logLines.push(cancelMessage);
   }
   const logContent = logLines.join('\n');
 
