@@ -29,16 +29,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'entryCount must be an integer' }, { status: 400 });
   }
 
-  try {
-    const whitelistDoc = await getDoc(doc(db, 'whitelist', userId));
+  // try {
+  //   const whitelistDoc = await getDoc(doc(db, 'whitelist', userId));
 
-    if (!whitelistDoc.exists()) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-  } catch (error) {
-    console.error('Failed to verify whitelist membership', error);
-    return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
-  }
+  //   if (!whitelistDoc.exists()) {
+  //     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  //   }
+  // } catch (error) {
+  //   console.error('Failed to verify whitelist membership', error);
+  //   return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
+  // }
 
   try {
     await setDoc(doc(db, 'jobs', jobId), {

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, type Timestamp } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
 
@@ -9,6 +9,23 @@ type StartJobFormProps = {
   entryOptions: number[];
   groupId: string;
   className?: string;
+};
+
+const JOB_CACHE_KEY = "startJobPendingJob";
+const PENDING_JOB_LIFETIME_MS = 30 * 60 * 1000;
+
+type JobDocumentData = {
+  status?: string;
+  message?: string | null;
+  progress?: string | null;
+  createdAt?: Timestamp | null;
+};
+
+type CachedJobState = {
+  firestoreJobId: string;
+  githubJobId?: string | null;
+  jobHtmlUrl?: string | null;
+  cachedAt: number;
 };
 
 export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
@@ -98,23 +115,9 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       setJobResult(null);
       setPassword("");
 
-      workflowLinkTimeoutRef.current = window.setTimeout(async () => {
-        try {
-      const workflowResponse = await fetch("/api/internal/workflow");
+      upsertCachedJobState({ firestoreJobId: data.jobId });
 
-          if (workflowResponse.ok) {
-            const workflowData = (await workflowResponse
-              .json()
-              .catch(() => null)) as { actions_url?: string | null; job_url?: string | null } | null;
-
-            if (workflowData?.job_url || workflowData?.actions_url) {
-              setJobHtmlUrl(workflowData.job_url || workflowData.actions_url || null);
-            }
-          }
-        } catch (error) {
-          console.error("Failed to fetch latest workflow URL", error);
-        }
-      }, 1800);
+      scheduleWorkflowLinkFetch();
     } catch (error) {
       console.error("Failed to start job", error);
       setIsError(true);
@@ -122,6 +125,42 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function scheduleWorkflowLinkFetch(delayMs = 1800) {
+    if (workflowLinkTimeoutRef.current !== null) {
+      window.clearTimeout(workflowLinkTimeoutRef.current);
+      workflowLinkTimeoutRef.current = null;
+    }
+
+    workflowLinkTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        const workflowResponse = await fetch("/api/internal/workflow");
+
+        if (workflowResponse.ok) {
+          const workflowData = (await workflowResponse
+            .json()
+            .catch(() => null)) as { actions_url?: string | null; job_url?: string | null } | null;
+
+          const nextUrl = workflowData?.job_url || workflowData?.actions_url || null;
+
+          if (nextUrl) {
+            setJobHtmlUrl(nextUrl);
+            const activeJobId = latestJobIdRef.current;
+
+            if (activeJobId) {
+              upsertCachedJobState({
+                firestoreJobId: activeJobId,
+                jobHtmlUrl: nextUrl,
+                githubJobId: extractGitHubJobId(workflowData?.job_url || workflowData?.actions_url || null),
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch latest workflow URL", error);
+      }
+    }, delayMs);
   }
 
   function readCookie(name: string) {
@@ -196,13 +235,16 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       doc(firestore, "jobs", jobId),
       (snapshot) => {
         if (!snapshot.exists()) {
+          clearCachedJobState();
+          setJobStatus(null);
+          setJobId(null);
           return;
         }
 
-        const data = snapshot.data() as { status?: string; message?: string | null; progress?: string | null } | undefined;
+        const data = snapshot.data() as JobDocumentData | undefined;
         const status = data?.status ?? null;
         const message = data?.message ?? null;
-        const progress = typeof data?.progress === 'string' ? data?.progress : null;
+        const progress = typeof data?.progress === "string" ? data?.progress : null;
 
         setJobStatus(status);
         setJobProgress(progress ?? null);
@@ -210,6 +252,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         if (status && status !== "pending") {
           setJobResult({ status, message });
           setJobId(null);
+          clearCachedJobState();
           if (workflowLinkTimeoutRef.current !== null) {
             window.clearTimeout(workflowLinkTimeoutRef.current);
             workflowLinkTimeoutRef.current = null;
@@ -233,6 +276,88 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!jobId || jobStatus !== "pending") {
+      return;
+    }
+
+    upsertCachedJobState({ firestoreJobId: jobId });
+  }, [jobId, jobStatus]);
+
+  useEffect(() => {
+    if (!jobId || jobStatus !== "pending" || !jobHtmlUrl) {
+      return;
+    }
+
+    upsertCachedJobState({
+      firestoreJobId: jobId,
+      jobHtmlUrl,
+      githubJobId: extractGitHubJobId(jobHtmlUrl),
+    });
+  }, [jobId, jobHtmlUrl, jobStatus]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function resumeJobFromCache() {
+      const cachedJob = readCachedJobState();
+
+      if (!cachedJob?.firestoreJobId) {
+        return;
+      }
+
+      try {
+        const snapshot = await getDoc(doc(firestore, "jobs", cachedJob.firestoreJobId));
+
+        if (!snapshot.exists()) {
+          clearCachedJobState();
+          return;
+        }
+
+        const data = snapshot.data() as JobDocumentData | undefined;
+        const status = data?.status ?? null;
+        const createdAtMillis = getTimestampMillis(data?.createdAt);
+
+        if (status !== "pending" || !createdAtMillis) {
+          clearCachedJobState();
+          return;
+        }
+
+        const isRecent = Date.now() - createdAtMillis <= PENDING_JOB_LIFETIME_MS;
+
+        if (!isRecent) {
+          clearCachedJobState();
+          return;
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        latestJobIdRef.current = cachedJob.firestoreJobId;
+        setJobId(cachedJob.firestoreJobId);
+        setJobStatus("pending");
+        setJobResult(null);
+        setJobProgress(typeof data?.progress === "string" ? data?.progress : null);
+
+        if (cachedJob.jobHtmlUrl) {
+          setJobHtmlUrl(cachedJob.jobHtmlUrl);
+        } else {
+          scheduleWorkflowLinkFetch(0);
+        }
+      } catch (error) {
+        console.error("Failed to resume job listener", error);
+        clearCachedJobState();
+      }
+    }
+
+    void resumeJobFromCache();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [firestore]);
 
   useEffect(() => {
     if (jobResult?.status === "failed") {
@@ -407,4 +532,95 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
 function buildDebugImageUrl(jobId: string | null): string | null {
   const cacheBust = Date.now();
   return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/debug.png?ts=${cacheBust}`;
+}
+
+function readCachedJobState(): CachedJobState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(JOB_CACHE_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as CachedJobState;
+
+    if (!parsed || typeof parsed.firestoreJobId !== "string") {
+      return null;
+    }
+
+    return parsed;
+  } catch (error) {
+    console.error("Failed to parse cached job state", error);
+    return null;
+  }
+}
+
+function upsertCachedJobState(updates: Partial<CachedJobState> & { firestoreJobId?: string }) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const existing = readCachedJobState();
+  const baseJobId = updates.firestoreJobId ?? existing?.firestoreJobId;
+
+  if (!baseJobId) {
+    return;
+  }
+
+  const nextState: CachedJobState = {
+    firestoreJobId: baseJobId,
+    githubJobId: updates.githubJobId ?? existing?.githubJobId ?? null,
+    jobHtmlUrl: updates.jobHtmlUrl ?? existing?.jobHtmlUrl ?? null,
+    cachedAt: Date.now(),
+  };
+
+  try {
+    window.localStorage.setItem(JOB_CACHE_KEY, JSON.stringify(nextState));
+  } catch (error) {
+    console.error("Failed to write cached job state", error);
+  }
+}
+
+function clearCachedJobState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(JOB_CACHE_KEY);
+  } catch (error) {
+    console.error("Failed to clear cached job state", error);
+  }
+}
+
+function extractGitHubJobId(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  const jobMatch = url.match(/\/job\/(\d+)/);
+
+  if (jobMatch?.[1]) {
+    return jobMatch[1];
+  }
+
+  const runMatch = url.match(/\/runs\/(\d+)/);
+
+  return runMatch?.[1] ?? null;
+}
+
+function getTimestampMillis(timestamp: Timestamp | null | undefined): number | null {
+  if (!timestamp) {
+    return null;
+  }
+
+  try {
+    return typeof timestamp.toMillis === "function" ? timestamp.toMillis() : null;
+  } catch {
+    return null;
+  }
 }

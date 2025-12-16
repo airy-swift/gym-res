@@ -34,6 +34,8 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   );
   const [editingEntry, setEditingEntry] = useState<RepresentativeEntry | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const editingDateInputValue = convertDisplayDateToInput(editingEntry?.date);
+  const editingTimeRange = getTimeRangeParts(editingEntry?.time);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) {
@@ -186,6 +188,29 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     setEditingEntry((prev) => (prev ? { ...prev, [field]: value } : prev));
   }, []);
 
+  const handleDateInputChange = useCallback((value: string) => {
+    setEditingEntry((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      return { ...prev, date: formatDisplayDateFromInput(value) };
+    });
+  }, []);
+
+  const handleTimeInputChange = useCallback((segment: "start" | "end", value: string) => {
+    setEditingEntry((prev) => {
+      if (!prev) {
+        return prev;
+      }
+
+      const currentParts = getTimeRangeParts(prev.time);
+      const nextParts = { ...currentParts, [segment]: value };
+
+      return { ...prev, time: formatTimeRangeLabel(nextParts.start, nextParts.end) };
+    });
+  }, []);
+
   return (
     <main
       className="relative min-h-screen bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20"
@@ -299,22 +324,40 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
               </label>
               <input
                 id="edit-date"
+                type="date"
                 className="w-full rounded-xl border border-stone-200 px-4 py-2"
-                value={editingEntry.date}
-                onChange={(event) => handleEditingFieldChange("date", event.target.value)}
+                value={editingDateInputValue}
+                onChange={(event) => handleDateInputChange(event.target.value)}
               />
+              {editingEntry?.date && !editingDateInputValue ? (
+                <p className="text-xs text-stone-500">現在の形式: {editingEntry.date}</p>
+              ) : null}
             </div>
 
             <div className="space-y-2 text-sm">
-              <label className="block text-xs font-semibold text-stone-600" htmlFor="edit-time">
+              <label className="block text-xs font-semibold text-stone-600" htmlFor="edit-time-start">
                 時間帯
               </label>
-              <input
-                id="edit-time"
-                className="w-full rounded-xl border border-stone-200 px-4 py-2"
-                value={editingEntry.time}
-                onChange={(event) => handleEditingFieldChange("time", event.target.value)}
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  id="edit-time-start"
+                  type="time"
+                  className="w-full rounded-xl border border-stone-200 px-4 py-2"
+                  value={editingTimeRange.start}
+                  onChange={(event) => handleTimeInputChange("start", event.target.value)}
+                />
+                <span className="text-xs text-stone-500">〜</span>
+                <input
+                  id="edit-time-end"
+                  type="time"
+                  className="w-full rounded-xl border border-stone-200 px-4 py-2"
+                  value={editingTimeRange.end}
+                  onChange={(event) => handleTimeInputChange("end", event.target.value)}
+                />
+              </div>
+              {editingEntry?.time && !editingTimeRange.start && !editingTimeRange.end ? (
+                <p className="text-xs text-stone-500">現在の形式: {editingEntry.time}</p>
+              ) : null}
             </div>
 
             <div className="flex justify-end gap-3 text-sm">
@@ -357,6 +400,100 @@ async function convertFileToBase64(file: File): Promise<string> {
     };
     reader.readAsDataURL(file);
   });
+}
+
+const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"] as const;
+
+function convertDisplayDateToInput(displayValue: string | undefined | null): string {
+  if (!displayValue) {
+    return "";
+  }
+
+  const normalized = normalizeDate(displayValue);
+
+  if (!normalized) {
+    return "";
+  }
+
+  const year = normalized.getFullYear();
+  const month = normalized.getMonth() + 1;
+  const day = normalized.getDate();
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function formatDisplayDateFromInput(inputValue: string): string {
+  if (!inputValue) {
+    return "";
+  }
+
+  const [yearStr, monthStr, dayStr] = inputValue.split("-");
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  if (Number.isNaN(year) || Number.isNaN(month) || Number.isNaN(day)) {
+    return "";
+  }
+
+  const date = new Date(year, month - 1, day);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const weekday = WEEKDAY_LABELS[date.getDay()] ?? "";
+  return `${year}年${month}月${day}日(${weekday})`;
+}
+
+type TimeRangeParts = { start: string; end: string };
+
+function getTimeRangeParts(raw: string | undefined | null): TimeRangeParts {
+  const sanitized = raw ?? "";
+  const fullMatch = sanitized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+
+  if (fullMatch) {
+    return {
+      start: normalizeTimeSegment(fullMatch[1], fullMatch[2]),
+      end: normalizeTimeSegment(fullMatch[3], fullMatch[4]),
+    };
+  }
+
+  const singleMatch = sanitized.match(/(\d{1,2}):(\d{2})/);
+
+  if (singleMatch) {
+    return {
+      start: normalizeTimeSegment(singleMatch[1], singleMatch[2]),
+      end: "",
+    };
+  }
+
+  return { start: "", end: "" };
+}
+
+function normalizeTimeSegment(hoursStr: string, minutesStr: string): string {
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return "";
+  }
+
+  const clampedHours = Math.min(23, Math.max(0, hours));
+  const clampedMinutes = Math.min(59, Math.max(0, minutes));
+
+  return `${String(clampedHours).padStart(2, "0")}:${String(clampedMinutes).padStart(2, "0")}`;
+}
+
+function formatTimeRangeLabel(start?: string, end?: string): string {
+  const safeStart = start?.trim() ?? "";
+  const safeEnd = end?.trim() ?? "";
+
+  if (safeStart && safeEnd) {
+    return `${safeStart}-${safeEnd}`;
+  }
+
+  return safeStart || safeEnd || "";
 }
 
 function sortEntries(entries: RepresentativeEntry[]): RepresentativeEntry[] {
