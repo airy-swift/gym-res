@@ -28,6 +28,8 @@ type CachedJobState = {
   cachedAt: number;
 };
 
+type DebugImageState = "idle" | "loading" | "unavailable";
+
 export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -41,6 +43,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   const [jobHtmlUrl, setJobHtmlUrl] = useState<string | null>(null);
   const [jobProgress, setJobProgress] = useState<string | null>(null);
   const [jobDebugImageUrl, setJobDebugImageUrl] = useState<string | null>(null);
+  const [debugImageState, setDebugImageState] = useState<DebugImageState>("idle");
   const [isInitialized, setIsInitialized] = useState(false);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
   const latestJobIdRef = useRef<string | null>(null);
@@ -64,6 +67,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
     setJobHtmlUrl(null);
     setJobProgress('準備してます');
     setJobDebugImageUrl(null);
+    setDebugImageState("idle");
     if (workflowLinkTimeoutRef.current !== null) {
       window.clearTimeout(workflowLinkTimeoutRef.current);
       workflowLinkTimeoutRef.current = null;
@@ -360,9 +364,70 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   }, [firestore]);
 
   useEffect(() => {
-    if (jobResult?.status === "failed") {
-      setJobDebugImageUrl(buildDebugImageUrl(latestJobIdRef.current));
+    if (jobResult?.status !== "failed") {
+      setDebugImageState("idle");
+      return;
     }
+
+    const jobIdForDebug = latestJobIdRef.current;
+
+    if (!jobIdForDebug || typeof window === "undefined") {
+      setDebugImageState("unavailable");
+      return;
+    }
+
+    setDebugImageState("loading");
+    setJobDebugImageUrl(null);
+
+    let isCancelled = false;
+    let attemptCount = 0;
+    const maxAttempts = 6;
+
+    const loadDebugImage = () => {
+      if (isCancelled) {
+        return;
+      }
+
+      const nextUrl = buildDebugImageUrl(jobIdForDebug);
+
+      if (!nextUrl) {
+        setDebugImageState("unavailable");
+        return;
+      }
+
+      const image = new window.Image();
+
+      image.onload = () => {
+        if (isCancelled) {
+          return;
+        }
+
+        setJobDebugImageUrl(nextUrl);
+        setDebugImageState("idle");
+      };
+
+      image.onerror = () => {
+        if (isCancelled) {
+          return;
+        }
+
+        attemptCount += 1;
+
+        if (attemptCount < maxAttempts) {
+          window.setTimeout(loadDebugImage, 2000);
+        } else {
+          setDebugImageState("unavailable");
+        }
+      };
+
+      image.src = nextUrl;
+    };
+
+    loadDebugImage();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [jobResult]);
 
   const isJobPending = jobStatus === "pending";
@@ -445,30 +510,34 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
         </form>
       ) : (
         <div className="space-y-4 rounded-3xl border border-stone-200 bg-white/80 p-8 text-center shadow-sm">
-          {jobResult?.status === "completed" ? (
-            <>
-              <p className="text-lg font-semibold text-stone-900">抽選応募完了！</p>
-              <p className="text-base text-stone-600">{jobResult.message ?? "特に言うことないです"}</p>
-            </>
-          ) : (
-            <>
-              <p className="text-lg font-semibold text-red-600">応募が失敗しました (failed)</p>
-              <p className="text-base text-stone-600">{jobResult?.message ?? "何らかのエラーが発生しました。"}</p>
-              {jobDebugImageUrl ? (
-                <div className="mt-4 space-y-2">
-                  <p className="text-xs text-stone-500">デバッグスクリーンショット</p>
-                  <div className="overflow-hidden rounded-2xl border border-stone-200">
-                    <img
-                      src={jobDebugImageUrl}
-                      alt="Playwright debug screenshot"
-                      className="h-auto w-full"
-                      loading="lazy"
-                    />
-                  </div>
-                </div>
-              ) : null}
-            </>
-          )}
+              {jobResult?.status === "completed" ? (
+                <>
+                  <p className="text-lg font-semibold text-stone-900">抽選応募完了！</p>
+                  <p className="text-base text-stone-600">{jobResult.message ?? "特に言うことないです"}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-red-600">応募が失敗しました (failed)</p>
+                  <p className="text-base text-stone-600">{jobResult?.message ?? "何らかのエラーが発生しました。"}</p>
+                  {jobDebugImageUrl ? (
+                    <div className="mt-4 space-y-2">
+                      <p className="text-xs text-stone-500">デバッグスクリーンショット</p>
+                      <div className="overflow-hidden rounded-2xl border border-stone-200">
+                        <img
+                          src={jobDebugImageUrl}
+                          alt="Playwright debug screenshot"
+                          className="h-auto w-full"
+                          loading="lazy"
+                        />
+                      </div>
+                    </div>
+                  ) : debugImageState === "loading" ? (
+                    <p className="mt-4 text-xs text-stone-500">デバッグスクリーンショットを取得しています...</p>
+                  ) : debugImageState === "unavailable" ? (
+                    <p className="mt-4 text-xs text-stone-500">デバッグスクリーンショットを取得できませんでした。</p>
+                  ) : null}
+                </>
+              )}
 
           {jobHtmlUrl && (
             <p className="text-xs">
@@ -530,6 +599,10 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
 }
 
 function buildDebugImageUrl(jobId: string | null): string | null {
+  if (!jobId) {
+    return null;
+  }
+
   const cacheBust = Date.now();
   return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/debug.png?ts=${cacheBust}`;
 }
