@@ -27,6 +27,7 @@ export type GroupDocumentData = {
     date?: string;
     time?: string;
   }>;
+  representatives?: string[];
 } & DocumentData;
 
 export type GroupDocument = GroupDocumentData & {

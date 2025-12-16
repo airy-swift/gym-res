@@ -2,12 +2,14 @@ import { RepresentativePageClient, type RepresentativeEntry } from "@/components
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
 type RepresentativePageProps = {
-  searchParams?: Promise<{ gp?: string }> | { gp?: string };
+  searchParams?: Promise<{ gp?: string; wl?: string }> | { gp?: string; wl?: string };
 };
 
 export default async function RepresentativePage({ searchParams }: RepresentativePageProps) {
   const resolvedSearchParams = await searchParams;
-  const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
+  const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null, {
+    representativeId: resolvedSearchParams?.wl ?? null,
+  });
 
   const initialEntries: RepresentativeEntry[] = Array.isArray(group.list)
     ? group.list.map((entry) => ({

@@ -4,7 +4,14 @@ import { getGroupDocument, type GroupDocument } from "@/lib/firebase";
 
 const UNAUTHORIZED_PATH = "/unauthorized";
 
-export async function ensureValidGroupAccess(groupId?: string | null): Promise<GroupDocument> {
+type GroupAccessOptions = {
+  representativeId?: string | null;
+};
+
+export async function ensureValidGroupAccess(
+  groupId?: string | null,
+  options?: GroupAccessOptions,
+): Promise<GroupDocument> {
   if (!groupId) {
     redirect(UNAUTHORIZED_PATH);
   }
@@ -13,6 +20,22 @@ export async function ensureValidGroupAccess(groupId?: string | null): Promise<G
 
   if (!group) {
     redirect(UNAUTHORIZED_PATH);
+  }
+
+  const shouldValidateRepresentative = options ? "representativeId" in options : false;
+
+  if (shouldValidateRepresentative) {
+    const representativeId = options?.representativeId;
+
+    if (!representativeId) {
+      redirect(UNAUTHORIZED_PATH);
+    }
+
+    const representatives = Array.isArray(group.representatives) ? group.representatives : [];
+
+    if (!representatives.includes(representativeId)) {
+      redirect(UNAUTHORIZED_PATH);
+    }
   }
 
   return group;

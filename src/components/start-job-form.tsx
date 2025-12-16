@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { doc, getDoc, onSnapshot, type Timestamp } from "firebase/firestore";
 
@@ -9,6 +10,8 @@ type StartJobFormProps = {
   entryOptions: number[];
   groupId: string;
   className?: string;
+  defaultEntryCount?: number;
+  representativeEntryCount?: number;
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
@@ -30,10 +33,16 @@ type CachedJobState = {
 
 type DebugImageState = "idle" | "loading" | "unavailable";
 
-export function StartJobForm({ entryOptions, groupId, className }: StartJobFormProps) {
+export function StartJobForm({
+  entryOptions,
+  groupId,
+  className,
+  defaultEntryCount,
+  representativeEntryCount,
+}: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
-  const [entryCount, setEntryCount] = useState(entryOptions[0] ?? 1);
+  const [entryCount, setEntryCount] = useState(() => resolveDefaultEntryCount(entryOptions, defaultEntryCount));
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -53,6 +62,13 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
   const formClassName = useMemo(() => {
     return ["space-y-6", className].filter(Boolean).join(" ").trim();
   }, [className]);
+
+  const normalizedRepresentativeCount = useMemo(() => {
+    if (typeof representativeEntryCount !== "number" || Number.isNaN(representativeEntryCount)) {
+      return 0;
+    }
+    return Math.max(0, representativeEntryCount);
+  }, [representativeEntryCount]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -445,7 +461,7 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               id="loginId"
               name="loginId"
               type="text"
-              placeholder="8桁くらいの数字"
+              placeholder="札幌公共施設予約システムのログインID"
               value={loginId}
               onChange={(event) => setLoginId(event.target.value)}
               className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
@@ -472,10 +488,12 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
           <div className="space-y-2">
             <label htmlFor="entryCount" className="text-sm font-medium text-stone-600">
               抽選応募個数
+              {normalizedRepresentativeCount > 0 ? (
+                <span className="ml-2 text-sm font-normal text-stone-500">
+                  (代表が{normalizedRepresentativeCount}件指定しています)
+                </span>
+              ) : null}
             </label>
-            <p className="text-xs text-stone-700">
-              (代表の指定数より多い場合、全体から最小応募数を探して追加応募します。追加で7分程かかるイメージです。)
-            </p>
             <select
               id="entryCount"
               name="entryCount"
@@ -483,9 +501,9 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
               onChange={(event) => setEntryCount(Number(event.target.value))}
               className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
             >
-              {entryOptions.map((num) => (
+              {[...entryOptions].sort((a, b) => b - a).map((num) => (
                 <option key={num} value={num}>
-                  {num}
+                  {formatEntryOptionLabel(num, normalizedRepresentativeCount)}
                 </option>
               ))}
             </select>
@@ -523,11 +541,14 @@ export function StartJobForm({ entryOptions, groupId, className }: StartJobFormP
                     <div className="mt-4 space-y-2">
                       <p className="text-xs text-stone-500">デバッグスクリーンショット</p>
                       <div className="overflow-hidden rounded-2xl border border-stone-200">
-                        <img
+                        <Image
                           src={jobDebugImageUrl}
                           alt="Playwright debug screenshot"
                           className="h-auto w-full"
-                          loading="lazy"
+                          width={720}
+                          height={405}
+                          sizes="100vw"
+                          priority={false}
                         />
                       </div>
                     </div>
@@ -605,6 +626,45 @@ function buildDebugImageUrl(jobId: string | null): string | null {
 
   const cacheBust = Date.now();
   return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/debug.png?ts=${cacheBust}`;
+}
+
+function formatEntryOptionLabel(value: number, representativeCount: number): string {
+  if (representativeCount <= 0) {
+    return String(value);
+  }
+
+  if (value === representativeCount) {
+    return `${value}（これ以下は代表の指定に従います）`;
+  }
+
+  if (value === representativeCount + 1) {
+    return `${value}（これ以上は追加で応募が少ない抽選を探索します / +10分くらい）`;
+  }
+
+  return String(value);
+}
+
+function resolveDefaultEntryCount(entryOptions: number[], fallback?: number): number {
+  const sanitizedOptions = entryOptions.length > 0 ? entryOptions : [1];
+  const base = sanitizedOptions[0] ?? 1;
+
+  if (typeof fallback !== "number" || Number.isNaN(fallback)) {
+    return base;
+  }
+
+  if (entryOptions.includes(fallback)) {
+    return fallback;
+  }
+
+  const minOption = Math.min(...sanitizedOptions);
+  const maxOption = Math.max(...sanitizedOptions);
+  const clamped = Math.min(Math.max(fallback, minOption), maxOption);
+
+  if (entryOptions.includes(clamped)) {
+    return clamped;
+  }
+
+  return base;
 }
 
 function readCachedJobState(): CachedJobState | null {

@@ -7,6 +7,7 @@ const numbers = Array.from({ length: 15 }, (_, index) => index + 1);
 
 type HomePageSearchParams = {
   gp?: string;
+  wl?: string;
 };
 
 type HomePageProps = {
@@ -18,7 +19,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
   const pageTitle = group.name ?? "サークル";
-  const representativeHref = `/representative?gp=${encodeURIComponent(group.id)}`;
+  const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
+  const maxEntryOption = numbers[numbers.length - 1] ?? 1;
+  const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
+  const representativeId = resolvedSearchParams?.wl ?? null;
+  const query = new URLSearchParams({ gp: group.id });
+
+  if (representativeId) {
+    query.set("wl", representativeId);
+  }
+
+  const representativeHref = `/representative?${query.toString()}`;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -38,10 +49,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <p className="mt-2 text-sm text-stone-600">
               自動抽選応募システムに使用するアカウント情報を入力してください
             </p>
+            <p className="mt-1 text-xs text-stone-500">
+              たまに通信まわりで失敗することがあります。うまくいかないときは少し待ってからリトライしてください！
+            </p>
           </div>
         </header>
 
-        <StartJobForm entryOptions={numbers} groupId={group.id} />
+        <StartJobForm
+          entryOptions={numbers}
+          groupId={group.id}
+          defaultEntryCount={defaultEntryCount}
+          representativeEntryCount={representativeCount}
+        />
       </section>
     </main>
   );

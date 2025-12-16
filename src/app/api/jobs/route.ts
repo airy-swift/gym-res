@@ -7,6 +7,19 @@ import { isAuthorizedRequest } from '@/lib/api/auth';
 import { dispatchJobWorkflow } from '@/lib/github/dispatch';
 import { markJobAsFailed } from '@/lib/api/internal-jobs';
 
+const formatHistoryTimestamp = (date: Date): string => {
+  const pad = (value: number, length = 2) => value.toString().padStart(length, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  const seconds = pad(date.getSeconds());
+  const milliseconds = pad(date.getMilliseconds(), 3);
+
+  return `${year}-${month}-${day}-${hours}:${minutes}:${seconds}.${milliseconds}`;
+};
+
 export async function POST(request: NextRequest) {
   const db = getFirestoreDb();
   const jobId = randomUUID().replace(/-/g, '');
@@ -125,6 +138,28 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'status or message is required' }, { status: 400 });
   }
 
+  let groupId: string | undefined;
+  let jobUserId: string | undefined;
+
+  try {
+    const snapshot = await getDoc(doc(db, 'jobs', jobId));
+
+    if (!snapshot.exists()) {
+      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
+    }
+
+    const jobData = snapshot.data() as { groupId?: string; userId?: string };
+    groupId = jobData.groupId;
+    jobUserId = jobData.userId;
+  } catch (error) {
+    console.error('Failed to fetch job before update', error);
+    return NextResponse.json({ error: 'Failed to fetch job' }, { status: 500 });
+  }
+
+  if (!groupId || !jobUserId) {
+    return NextResponse.json({ error: 'Job is missing groupId or userId' }, { status: 400 });
+  }
+
   const updates: Record<string, unknown> = {
     updatedAt: serverTimestamp(),
     userId: deleteField(),
@@ -140,7 +175,15 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await updateDoc(doc(db, 'jobs', jobId), updates);
+    const jobRef = doc(db, 'jobs', jobId);
+    const historyDocId = formatHistoryTimestamp(new Date());
+    const historyDocRef = doc(db, 'groups', groupId, 'history', historyDocId);
+    const historyDocData: Record<string, unknown> = {
+      userId: jobUserId,
+      message: message ?? null,
+    };
+
+    await Promise.all([updateDoc(jobRef, updates), setDoc(historyDocRef, historyDocData)]);
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {
     console.error('Failed to update job', error);

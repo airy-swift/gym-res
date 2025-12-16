@@ -28,6 +28,35 @@ export async function main(): Promise<void> {
   const successEntries: RepresentativeEntry[] = [];
   const failedEntries: RepresentativeEntry[] = [];
   let skippedCount = 0;
+  let expectedEntryTotal: number | null = null;
+  let totalEntries = 0;
+  let screenshotCaptured = false;
+
+  const ensureScreenshot = async (): Promise<void> => {
+    if (screenshotCaptured || !page) {
+      return;
+    }
+    try {
+      await captureScreenshot(page, 'debug');
+      screenshotCaptured = true;
+    } catch (screenshotError) {
+      console.error('Failed to capture debug screenshot', screenshotError);
+    }
+  };
+
+  const syncResultCounts = (): void => {
+    const expected = expectedEntryTotal ?? (totalEntries || null);
+    if (expected === null) {
+      return;
+    }
+    const recorded = successEntries.length + failedEntries.length + skippedCount;
+    if (recorded >= expected) {
+      return;
+    }
+    const adjustment = expected - recorded;
+    skippedCount += adjustment;
+    logEarlyReturn(`Adjusted skipped count by ${adjustment} to match expected entries (${expected}).`);
+  };
 
   try {
     browser = await chromium.launch({ headless: HEADLESS });
@@ -37,12 +66,15 @@ export async function main(): Promise<void> {
     });
     page = await context.newPage();
 
+    const job = await fetchJob();
+    const jobEntryCount = job?.entryCount ?? null;
+    if (jobEntryCount !== null) {
+      expectedEntryTotal = jobEntryCount;
+    }
+
     await page.goto(CANCEL_URL, { waitUntil: 'domcontentloaded' });
     await runLoginPage(page);
     await new Promise((resolve) => setTimeout(resolve, 1_000));
-
-    const job = await fetchJob();
-    const jobEntryCount = job?.entryCount ?? null;
 
     // 代表が予約して欲しい枠
     let representativeEntries = await fetchRepresentativeEntries();
@@ -57,7 +89,10 @@ export async function main(): Promise<void> {
       console.log('応募先の枠: ', representativeEntries);
     }
 
-    const totalEntries = representativeEntries.length;
+    totalEntries = representativeEntries.length;
+    if (expectedEntryTotal === null) {
+      expectedEntryTotal = totalEntries;
+    }
     await updateJobProgress(`${0}/${totalEntries}件`);
 
     // 今のアカウントが既に応募済みの枠
@@ -118,6 +153,7 @@ export async function main(): Promise<void> {
       await updateJobProgress(`${Math.min(processedCount, totalEntries)}/${totalEntries}件`);
     }
 
+    syncResultCounts();
     if (successEntries.length > 0 || failedEntries.length > 0) {
       console.log('Reservation results summary');
       successEntries.forEach(entry => {
@@ -129,18 +165,15 @@ export async function main(): Promise<void> {
       console.log(`Skipped entries: ${skippedCount}`);
     }
   } catch (error) {
+    syncResultCounts();
+    await ensureScreenshot();
     logEarlyReturn(
       `Login flow failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;
   } finally {
-    if (page) {
-      try {
-        await captureScreenshot(page, 'debug');
-      } catch (screenshotError) {
-        console.error('Failed to capture debug screenshot', screenshotError);
-      }
-    }
+    syncResultCounts();
+    await ensureScreenshot();
     await browser?.close();
     await persistLogFile(successEntries, failedEntries, skippedCount);
     await sendLineNotification(`${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件`);

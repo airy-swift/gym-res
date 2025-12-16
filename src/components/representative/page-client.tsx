@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 
@@ -29,13 +29,24 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [entries, setEntries] = useState<RepresentativeEntry[]>(() => sortEntries(initialEntries));
-  const [infoMessage, setInfoMessage] = useState<string | null>(
-    initialEntries.length > 0 ? "Firestore から読み込みました" : null,
-  );
+  const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
   const [editingEntry, setEditingEntry] = useState<RepresentativeEntry | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const editingDateInputValue = convertDisplayDateToInput(editingEntry?.date);
-  const editingTimeRange = getTimeRangeParts(editingEntry?.time);
+  const toastTimeoutRef = useRef<number | null>(null);
+  const editingDateInputValue = useMemo(() => convertDisplayDateToInput(editingEntry?.date), [editingEntry?.date]);
+  const editingTimeRange = useMemo(() => getTimeRangeParts(editingEntry?.time), [editingEntry?.time]);
+
+  const showToast = useCallback((message: string, tone: "success" | "error" = "success") => {
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+
+    setToast({ message, tone });
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 4000);
+  }, []);
 
   const handleFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) {
@@ -111,7 +122,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
       await saveEntriesToGroup(groupId, mergedEntries);
 
       setEntries(mergedEntries);
-      setInfoMessage("Firestoreに追加しました");
+      showToast("データベースに追加しました");
       setStatus("success");
     } catch (uploadError) {
       console.error("画像解析に失敗しました", uploadError);
@@ -120,7 +131,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         uploadError instanceof Error ? uploadError.message : "アップロード中にエラーが発生しました。",
       );
     }
-  }, [entries, groupId, groupName]);
+  }, [entries, groupId, showToast]);
 
   const onDrop = useCallback((event: DragEvent<HTMLElement>) => {
     const includesFiles = event.dataTransfer?.types?.includes("Files");
@@ -162,8 +173,8 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     const updatedEntries = entries.filter((_, entryIndex) => entryIndex !== index);
     await saveEntriesToGroup(groupId, updatedEntries);
     setEntries(updatedEntries);
-    setInfoMessage("候補を削除しました");
-  }, [entries, groupId]);
+    showToast("データベースから削除しました");
+  }, [entries, groupId, showToast]);
 
   const handleDialogClose = useCallback(() => {
     setEditingEntry(null);
@@ -180,9 +191,9 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     );
     await saveEntriesToGroup(groupId, updatedEntries);
     setEntries(updatedEntries);
-    setInfoMessage("候補を更新しました");
+    showToast("データベースを更新しました");
     handleDialogClose();
-  }, [editingEntry, editingIndex, entries, groupId, handleDialogClose]);
+  }, [editingEntry, editingIndex, entries, groupId, handleDialogClose, showToast]);
 
   const handleEditingFieldChange = useCallback((field: keyof RepresentativeEntry, value: string) => {
     setEditingEntry((prev) => (prev ? { ...prev, [field]: value } : prev));
@@ -211,6 +222,14 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     });
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <main
       className="relative min-h-screen bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20"
@@ -221,7 +240,6 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
       <section className="mx-auto w-full max-w-3xl space-y-6 rounded-[32px] border border-stone-200/70 bg-white/80 p-10 shadow-sm">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Representative</p>
         <h1 className="text-2xl font-semibold text-stone-900">サークル: {groupName ?? groupId}</h1>
-        {infoMessage ? <p className="text-xs text-stone-500">{infoMessage}</p> : null}
 
         <div className="space-y-3 rounded-3xl border border-stone-200 bg-white/70 p-6">
           <p className="text-sm font-semibold text-stone-700">抽選応募先 (メンバーがコレを利用したときこのリストのそれぞれに応募します)</p>
@@ -330,7 +348,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
                 onChange={(event) => handleDateInputChange(event.target.value)}
               />
               {editingEntry?.date && !editingDateInputValue ? (
-                <p className="text-xs text-stone-500">現在の形式: {editingEntry.date}</p>
+                <p className="text-xs text-red-500">形式が異なるため上書きすると修正されます: {editingEntry.date}</p>
               ) : null}
             </div>
 
@@ -355,8 +373,8 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
                   onChange={(event) => handleTimeInputChange("end", event.target.value)}
                 />
               </div>
-              {editingEntry?.time && !editingTimeRange.start && !editingTimeRange.end ? (
-                <p className="text-xs text-stone-500">現在の形式: {editingEntry.time}</p>
+              {editingEntry?.time && (!editingTimeRange.start || !editingTimeRange.end) ? (
+                <p className="text-xs text-red-500">形式が異なるため上書きすると修正されます: {editingEntry.time}</p>
               ) : null}
             </div>
 
@@ -379,6 +397,15 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
           </div>
         </div>
       )}
+      {toast ? (
+        <div className="fixed bottom-6 right-6 z-50">
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toast.tone === "success" ? "border-green-200 bg-white text-green-700" : "border-red-200 bg-white text-red-600"}`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -449,26 +476,20 @@ function formatDisplayDateFromInput(inputValue: string): string {
 type TimeRangeParts = { start: string; end: string };
 
 function getTimeRangeParts(raw: string | undefined | null): TimeRangeParts {
-  const sanitized = raw ?? "";
-  const fullMatch = sanitized.match(/(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})/);
+  const sanitized = (raw ?? "").replace(/\s+/g, "");
 
-  if (fullMatch) {
-    return {
-      start: normalizeTimeSegment(fullMatch[1], fullMatch[2]),
-      end: normalizeTimeSegment(fullMatch[3], fullMatch[4]),
-    };
+  if (!sanitized) {
+    return { start: "", end: "" };
   }
 
-  const singleMatch = sanitized.match(/(\d{1,2}):(\d{2})/);
+  const parts = sanitized.split("-");
+  const startMatch = parts[0]?.match(/(\d{1,2}):(\d{2})/);
+  const endMatch = parts[1]?.match(/(\d{1,2}):(\d{2})/);
 
-  if (singleMatch) {
-    return {
-      start: normalizeTimeSegment(singleMatch[1], singleMatch[2]),
-      end: "",
-    };
-  }
-
-  return { start: "", end: "" };
+  return {
+    start: startMatch ? normalizeTimeSegment(startMatch[1], startMatch[2]) : "",
+    end: endMatch ? normalizeTimeSegment(endMatch[1], endMatch[2]) : "",
+  };
 }
 
 function normalizeTimeSegment(hoursStr: string, minutesStr: string): string {
