@@ -15,7 +15,6 @@ type StartJobFormProps = {
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
-const PENDING_JOB_LIFETIME_MS = 30 * 60 * 1000;
 
 type JobDocumentData = {
   status?: string;
@@ -56,6 +55,7 @@ export function StartJobForm({
   const [isInitialized, setIsInitialized] = useState(false);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
   const latestJobIdRef = useRef<string | null>(null);
+  const jobSnapshotUnsubscribeRef = useRef<null | (() => void)>(null);
 
   const firestore = useMemo(() => getFirestoreDb(), []);
 
@@ -183,6 +183,31 @@ export function StartJobForm({
     }, delayMs);
   }
 
+  function cancelActiveJob() {
+    if (!window.confirm("応募の監視を中断してトップに戻りますか？")) {
+      return;
+    }
+
+    if (jobSnapshotUnsubscribeRef.current) {
+      jobSnapshotUnsubscribeRef.current();
+      jobSnapshotUnsubscribeRef.current = null;
+    }
+
+    if (workflowLinkTimeoutRef.current !== null) {
+      window.clearTimeout(workflowLinkTimeoutRef.current);
+      workflowLinkTimeoutRef.current = null;
+    }
+
+    clearCachedJobState();
+    latestJobIdRef.current = null;
+    setJobId(null);
+    setJobStatus(null);
+    setJobResult(null);
+    setJobProgress(null);
+    setJobHtmlUrl(null);
+    setJobDebugImageUrl(null);
+  }
+
   function readCookie(name: string) {
     if (typeof document === "undefined") {
       return null;
@@ -247,6 +272,7 @@ export function StartJobForm({
 
   useEffect(() => {
     if (!jobId) {
+      jobSnapshotUnsubscribeRef.current = null;
       setJobStatus(null);
       return;
     }
@@ -272,7 +298,6 @@ export function StartJobForm({
         if (status && status !== "pending") {
           setJobResult({ status, message });
           setJobId(null);
-          clearCachedJobState();
           if (workflowLinkTimeoutRef.current !== null) {
             window.clearTimeout(workflowLinkTimeoutRef.current);
             workflowLinkTimeoutRef.current = null;
@@ -284,8 +309,13 @@ export function StartJobForm({
       },
     );
 
+    jobSnapshotUnsubscribeRef.current = unsubscribe;
+
     return () => {
       unsubscribe();
+      if (jobSnapshotUnsubscribeRef.current === unsubscribe) {
+        jobSnapshotUnsubscribeRef.current = null;
+      }
     };
   }, [firestore, jobId]);
 
@@ -296,6 +326,14 @@ export function StartJobForm({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!jobResult) {
+      return;
+    }
+
+    clearCachedJobState();
+  }, [jobResult]);
 
   useEffect(() => {
     if (!jobId || jobStatus !== "pending") {
@@ -337,16 +375,10 @@ export function StartJobForm({
 
         const data = snapshot.data() as JobDocumentData | undefined;
         const status = data?.status ?? null;
-        const createdAtMillis = getTimestampMillis(data?.createdAt);
+        const progress = typeof data?.progress === "string" ? data?.progress : null;
+        const message = typeof data?.message === "string" ? data?.message : null;
 
-        if (status !== "pending" || !createdAtMillis) {
-          clearCachedJobState();
-          return;
-        }
-
-        const isRecent = Date.now() - createdAtMillis <= PENDING_JOB_LIFETIME_MS;
-
-        if (!isRecent) {
+        if (!status) {
           clearCachedJobState();
           return;
         }
@@ -356,15 +388,23 @@ export function StartJobForm({
         }
 
         latestJobIdRef.current = cachedJob.firestoreJobId;
-        setJobId(cachedJob.firestoreJobId);
-        setJobStatus("pending");
-        setJobResult(null);
-        setJobProgress(typeof data?.progress === "string" ? data?.progress : null);
+        setJobProgress(progress ?? null);
 
-        if (cachedJob.jobHtmlUrl) {
-          setJobHtmlUrl(cachedJob.jobHtmlUrl);
+        if (status === "pending") {
+          setJobId(cachedJob.firestoreJobId);
+          setJobStatus("pending");
+          setJobResult(null);
+
+          if (cachedJob.jobHtmlUrl) {
+            setJobHtmlUrl(cachedJob.jobHtmlUrl);
+          } else {
+            scheduleWorkflowLinkFetch(0);
+          }
         } else {
-          scheduleWorkflowLinkFetch(0);
+          setJobId(null);
+          setJobStatus(status);
+          setJobResult({ status, message });
+          setJobHtmlUrl(cachedJob.jobHtmlUrl ?? null);
         }
       } catch (error) {
         console.error("Failed to resume job listener", error);
@@ -587,7 +627,29 @@ export function StartJobForm({
 
       {isJobPending ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur">
-          <div className="w-full max-w-xs rounded-[32px] border border-white/40 bg-white/90 px-8 py-10 text-center text-stone-900 shadow-2xl">
+          <div className="relative w-full max-w-xs rounded-[32px] border border-white/40 bg-white/90 px-8 py-10 text-center text-stone-900 shadow-2xl">
+            <button
+              type="button"
+              onClick={cancelActiveJob}
+              aria-label="応募の監視を中断"
+              className="absolute left-4 top-4 text-red-600 transition hover:text-red-700"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+              >
+                <path
+                  d="M9 3h6m-8 4h10l-.8 12.4c-.06.9-.8 1.6-1.7 1.6H9.5c-.9 0-1.64-.7-1.7-1.6L7 7Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M10 11v6m4-6v6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
             <span className="mx-auto mb-4 block h-12 w-12 animate-spin rounded-full border-4 border-stone-200 border-t-sky-600" />
             <p className="text-sm font-semibold">
               応募中...
@@ -744,16 +806,4 @@ function extractGitHubJobId(url: string | null | undefined): string | null {
   const runMatch = url.match(/\/runs\/(\d+)/);
 
   return runMatch?.[1] ?? null;
-}
-
-function getTimestampMillis(timestamp: Timestamp | null | undefined): number | null {
-  if (!timestamp) {
-    return null;
-  }
-
-  try {
-    return typeof timestamp.toMillis === "function" ? timestamp.toMillis() : null;
-  } catch {
-    return null;
-  }
 }
