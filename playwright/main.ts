@@ -192,6 +192,14 @@ function formatEntry(entry: RepresentativeEntry): string {
   return `${gym} / ${room} / ${date} ${time}`;
 }
 
+function formatSuccessSummary(entry: RepresentativeEntry): string {
+  const gym = entry.gymName || '施設未指定';
+  const room = entry.room || '部屋未指定';
+  const date = entry.date || '日付未指定';
+  const time = entry.time || '時間未指定';
+  return `${date} ${time}に${gym}の${room}を予約しました。`;
+}
+
 function normalizeEntry(entry: RepresentativeEntry): RepresentativeEntry {
   return {
     gymName: normalizeText(entry.gymName),
@@ -219,13 +227,15 @@ async function persistLogFile(
   skippedCount: number,
   cancelledCount: number,
 ): Promise<void> {
-  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件\n\n`;
-  const failureLines = failedEntries.length > 0
+  const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件`;
+  const detailLines = failedEntries.length > 0
     ? failedEntries.map(entry => `失敗: ${formatEntry(entry)}`)
-    : ['失敗はありませんでした。'];
+    : successEntries.length > 0
+      ? successEntries.map(entry => formatSuccessSummary(entry))
+      : ['失敗はありませんでした。'];
   const skipMessage = skippedCount > 0 ? '一部の候補は既に予約済みのためスキップしました。' : undefined;
   const cancelMessage = cancelledCount > 0 ? 'ログイン不可などの理由で処理できなかった枠をキャンセルとして計上しました。' : undefined;
-  const logLines = [summaryLine, ...failureLines];
+  const logLines = [summaryLine, '', ...detailLines];
   if (skipMessage) {
     logLines.push(skipMessage);
   }

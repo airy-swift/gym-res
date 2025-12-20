@@ -58,15 +58,19 @@ export async function runSeekLotPage(
           ?.querySelector('th .v-btn__content')
           ?.textContent
           ?.trim();
-        return name ? ` / ${name}` : '';
+        return name ?? '';
       });
+      if (boothName === '全面') {
+        continue;
+      }
+      const boothSuffix = boothName ? ` / ${boothName}` : '';
       
       
       results.push({
         count: lotteryCount,
         entry: {
             gymName: gymName,
-            room: `${roomName}${boothName}`,
+            room: `${roomName}${boothSuffix}`,
             date,
             time: timeRange,
         },
