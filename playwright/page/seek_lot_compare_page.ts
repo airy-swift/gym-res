@@ -65,11 +65,14 @@ export async function runSeekLotComparePage(
           .forEach(({ count, entry }) => {
             // すでに同じ entry が入っていればスキップ
             const alreadyExists = results.some(e => entriesAreEqual(e.entry, entry));
-            if (alreadyExists) return;
+            if (alreadyExists) {
+              logRejected(entry, count);
+              return;
+            }
 
             // まだ枠に余裕があるならそのまま入れる
             if (results.length < desiredCount) {
-              console.log('採用！ 応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time)
+              logAdopted(entry, count);
               results.push({ count, entry });
               return;
             }
@@ -85,8 +88,10 @@ export async function runSeekLotComparePage(
 
             // 今の方がマシ（count が小さい）なら入れ替える
             if (count < worst.count) {
-              console.log('採用！ 応募数:', count, '施設:', entry.gymName, '部屋:', entry.room, '日付:', entry.date, '時間:', entry.time)
+              logAdopted(entry, count);
               results[worstIndex] = { count, entry };
+            } else {
+              logRejected(entry, count);
             }
           });
       }
@@ -125,4 +130,16 @@ function formatJapaneseDate(rawDate: string): string {
   const weekday = ['日', '月', '火', '水', '木', '金', '土'][jstTimestamp.getUTCDay()];
 
   return `${year}年${month}月${day}日(${weekday})`;
+}
+
+function formatEntryLog(entry: RepresentativeEntry, count: number): string {
+  return `応募数:${count} 施設:${entry.gymName} 部屋:${entry.room} 日付:${entry.date} 時間:${entry.time}`;
+}
+
+function logAdopted(entry: RepresentativeEntry, count: number): void {
+  console.log(`🎉 採用 ${formatEntryLog(entry, count)}`);
+}
+
+function logRejected(entry: RepresentativeEntry, count: number): void {
+  console.log(`  見送り 応募数:${count} 施設:${entry.gymName}`);
 }
