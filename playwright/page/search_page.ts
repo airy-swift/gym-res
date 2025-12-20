@@ -3,7 +3,8 @@ import type { Page } from '@playwright/test';
 import type { RepresentativeEntry } from '../types';
 import { deriveUdParam, throwLoggedError } from '../util';
 const SEARCH_INPUT_SELECTOR = '#input-43';
-const LOT_SEARCH_URL = 'https://yoyaku.harp.lg.jp/sapporo/?u%5B0%5D=28&ud=';
+
+const LOT_SEARCH_URL = 'https://yoyaku.harp.lg.jp/sapporo/?u%5B0%5D=28&u%5B1%5D=76&ud=';
 
 export async function runSearchPage(page: Page, entry: RepresentativeEntry): Promise<void> {
   const udParam = deriveUdParam(entry.date);
