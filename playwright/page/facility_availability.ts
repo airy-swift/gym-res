@@ -11,13 +11,9 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
   await waitForTutorial(page);
   await new Promise(resolve => setTimeout(resolve, 1_000));
 
-  let [room, booth] = entry.room.split('/');
-  // if (!booth) {
-  //   booth = room;
-  // }
-  // 時間測りたい
-  const matchingRowIndex = await getMatchingRow(page, room);
-  const lotterySlots = await getLotterySlots(page, matchingRowIndex, booth);
+  const [room, booth] = splitRoomAndBooth(entry.room);
+  const matchingRowIndex = await getMatchingRow(page, room, booth);
+  const lotterySlots = await getLotterySlots(page, matchingRowIndex);
 
   const entryRange = parseEntryTime(entry.time);
   if (!entryRange) {
@@ -46,36 +42,34 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
 }
 
 // trの見出しから選択するrowを取り出したい
-async function getMatchingRow(page: Page, room: string): Promise<number> {
-  const index = await page
+async function getMatchingRow(
+  page: Page,
+  room: string,
+  booth?: string
+): Promise<number> {
+  const targetLabel = normalizeLabel(booth ?? room);
+
+  const labels: string[] = await page
     .locator('table.AvailabilityFrames_gridTable tr')
-    .evaluateAll((trs, roomText) => {
-      const target = (roomText ?? '').trim();
-
-      for (let i = 0; i < trs.length; i++) {
-        const tr = trs[i] as HTMLTableRowElement;
-        const btn = tr.querySelector(
-          'button.AvailabilityFrames_textBtn .v-btn__content'
+    .evaluateAll((trs) =>
+      trs.map((tr) => {
+        const el = tr.querySelector<HTMLElement>(
+          'th.AvailabilityFrames_gridTable_tbody_rowTitle .v-btn__content'
         );
-        if (!btn) continue;
-
-        const label = (btn.textContent ?? '').trim();
-        if (label === target) {
-          return i;
-        }
-      }
-
-      return -1;
-    }, room);
-
-  if (index === -1) {
-    throwLoggedError(
-      '[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。'
+        return (el?.textContent ?? '').trim();
+      })
     );
+
+  for (let i = 0; i < labels.length; i += 1) {
+    if (!labels[i]) continue;
+    if (normalizeLabel(labels[i]) === targetLabel) {
+      return i;
+    }
   }
 
-  return index;
+  throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
 }
+
 
 
 // // trの見出しから選択するrowを取り出したい
@@ -115,27 +109,8 @@ async function getMatchingRow(page: Page, room: string): Promise<number> {
 // }
 
 // 
-async function getLotterySlots(page: Page, matchingRowIndex: number, booth?: string): Promise<Array<Locator>> {
-  let targetRow: Locator | undefined;
-  if (booth) {
-    for (let i = matchingRowIndex + 2; i < 5; i += 1) {
-      const matchingRow = page.locator('table.AvailabilityFrames_gridTable tr').nth(i);
-      const boothButtons = matchingRow.locator('button.AvailabilityFrames_textBtn .v-btn__content');
-      const boothButton = boothButtons.filter({ hasText: booth }).first();
-      if (boothButton) {
-        targetRow = matchingRow;
-        break;
-      }
-    }
-  } else {
-    const matchingRow = page.locator('table.AvailabilityFrames_gridTable tr').nth(matchingRowIndex + 2);
-    targetRow = matchingRow;
-  }
-
-  if (!targetRow) {
-    throwLoggedError(`[runFacilityAvailabilityPage:No.3] 希望するブース行を特定できませんでした。${booth}, ${matchingRowIndex}`);
-  }
-
+async function getLotterySlots(page: Page, matchingRowIndex: number): Promise<Array<Locator>> {
+  const targetRow = page.locator('table.AvailabilityFrames_gridTable tr').nth(matchingRowIndex);
   const lotteryButtons = targetRow.locator('button[title$="抽選申込可"]');
   const lotteryButtonCount = await lotteryButtons.count();
   const lotterySlots: Array<Locator> = [];
@@ -146,6 +121,24 @@ async function getLotterySlots(page: Page, matchingRowIndex: number, booth?: str
   }
 
   return lotterySlots;
+}
+
+function splitRoomAndBooth(room: string): [string, string | undefined] {
+  const segments = room.split('/').map(part => part.trim()).filter(Boolean);
+  if (segments.length === 0) {
+    return ['', undefined];
+  }
+
+  if (segments.length === 1) {
+    return [segments[0], undefined];
+  }
+
+  const booth = segments.pop();
+  return [segments.join(' / '), booth];
+}
+
+function normalizeLabel(value?: string): string {
+  return (value ?? '').replace(/\s+/g, '').trim();
 }
 
 async function resolveSlotsForEntryTime(

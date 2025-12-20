@@ -13,6 +13,7 @@ import { ensureRequestStatusPage } from './page/request_status_page';
 import { runSearchPage } from './page/search_page';
 import { runFacilitySearchPage } from './page/facility_search_page';
 import { runFacilityAvailabilityPage } from './page/facility_availability';
+import { runFacilityAvailabilityComparisonPage } from './page/facility_availability_comparison';
 import { runSeekLotComparePage } from './page/seek_lot_compare_page';
 import { sendLineNotification } from './util';
 // Placeholder configuration values. Replace with the real ones when wiring this up.
@@ -129,6 +130,7 @@ export async function main(): Promise<void> {
       try {
         await runSearchPage(page, entry);
         await runFacilitySearchPage(page);
+        await runFacilityAvailabilityComparisonPage(page, entry);
         await runFacilityAvailabilityPage(page, entry);
         await runLotRequestPage(page, requestStatusEntries);
         const confirmed = await runConfirmationPage(page);
