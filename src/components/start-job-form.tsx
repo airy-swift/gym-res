@@ -15,6 +15,7 @@ type StartJobFormProps = {
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
+const SUBMISSION_WINDOW_MESSAGE = "応募の受付時間は毎日9:00〜22:59です。時間内に操作してください。";
 // Set to a job id to force showing its result for design/debug work.
 const DEBUG_RESULT_JOB_ID = "";
 
@@ -55,9 +56,12 @@ export function StartJobForm({
   const [jobDebugImageUrl, setJobDebugImageUrl] = useState<string | null>(null);
   const [debugImageState, setDebugImageState] = useState<DebugImageState>("idle");
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isSubmissionWindowOpen, setIsSubmissionWindowOpen] = useState(() => isWithinSubmissionWindow());
+  const [toast, setToast] = useState<{ message: string; tone: "error" | "info" } | null>(null);
   const workflowLinkTimeoutRef = useRef<number | null>(null);
   const latestJobIdRef = useRef<string | null>(null);
   const jobSnapshotUnsubscribeRef = useRef<null | (() => void)>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   const firestore = useMemo(() => getFirestoreDb(), []);
 
@@ -74,6 +78,13 @@ export function StartJobForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!isSubmissionWindowOpen) {
+      setIsError(true);
+      setFeedback(SUBMISSION_WINDOW_MESSAGE);
+      showToast(SUBMISSION_WINDOW_MESSAGE);
+      return;
+    }
 
     if (!window.confirm("抽選に応募しますがよろしいですか？")) {
       return;
@@ -210,6 +221,23 @@ export function StartJobForm({
     setJobDebugImageUrl(null);
   }
 
+  function showToast(message: string, tone: "error" | "info" = "error") {
+    setToast({ message, tone });
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (toastTimeoutRef.current !== null) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 3200);
+  }
+
   function readCookie(name: string) {
     if (typeof document === "undefined") {
       return null;
@@ -246,6 +274,23 @@ export function StartJobForm({
 
     setIsInitialized(true);
   }, [entryOptions]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateWindowState = () => {
+      setIsSubmissionWindowOpen(isWithinSubmissionWindow());
+    };
+
+    updateWindowState();
+    const intervalId = window.setInterval(updateWindowState, 30 * 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -325,6 +370,10 @@ export function StartJobForm({
     return () => {
       if (workflowLinkTimeoutRef.current !== null) {
         window.clearTimeout(workflowLinkTimeoutRef.current);
+      }
+
+      if (toastTimeoutRef.current !== null) {
+        window.clearTimeout(toastTimeoutRef.current);
       }
     };
   }, []);
@@ -607,7 +656,7 @@ export function StartJobForm({
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || !isSubmissionWindowOpen}
             className="w-full rounded-2xl border border-sky-900/10 bg-sky-700 py-3 text-sm font-semibold tracking-wide text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {submitting ? "送信中..." : "実行"}
@@ -615,6 +664,9 @@ export function StartJobForm({
           <p className="text-xs text-stone-700">
             2分 + 1件あたり30秒程かかります。
           </p>
+          {!isSubmissionWindowOpen ? (
+            <p className="text-xs text-red-600">{SUBMISSION_WINDOW_MESSAGE}</p>
+          ) : null}
 
           {feedback ? (
             <p className={`text-center text-sm ${isError ? "text-red-600" : "text-stone-700"}`}>
@@ -734,6 +786,16 @@ export function StartJobForm({
                 <span className="text-stone-400">進行状況 (取得中...)</span>
               )}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {toast ? (
+        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 px-4">
+          <div
+            className={`rounded-2xl border px-4 py-3 text-sm shadow-lg ${toast.tone === "error" ? "border-red-200 bg-white text-red-600" : "border-stone-200 bg-white text-stone-700"}`}
+          >
+            {toast.message}
           </div>
         </div>
       ) : null}
@@ -866,4 +928,13 @@ function extractGitHubJobId(url: string | null | undefined): string | null {
   const runMatch = url.match(/\/runs\/(\d+)/);
 
   return runMatch?.[1] ?? null;
+}
+
+function isWithinSubmissionWindow(date = new Date()): boolean {
+  const jstHour = (date.getUTCHours() + 9 + 24) % 24;
+  const jstMinute = date.getUTCMinutes();
+  const totalMinutes = jstHour * 60 + jstMinute;
+  const earliestMinutes = 9 * 60;
+  const latestMinutes = 22 * 60 + 59;
+  return totalMinutes >= earliestMinutes && totalMinutes <= latestMinutes;
 }
