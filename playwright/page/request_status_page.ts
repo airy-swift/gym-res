@@ -32,9 +32,20 @@ export async function ensureRequestStatusPage(page: Page): Promise<Representativ
   await new Promise(resolve => setTimeout(resolve, 3_000));
 
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
-  const lotteryList = page.locator('div[role="list"].v-list.is-withBorder-marginL.h-radius-s').first();
+  const lotteryLists = page.locator('div[role="list"].v-list.is-withBorder-marginL.h-radius-s');
+  if ((await lotteryLists.count()) === 0) {
+    logEarlyReturn('No lottery list found on request status page.');
+    return [];
+  }
+
+  const lotteryList = lotteryLists.first();
   const listItems = lotteryList.locator('div[role="listitem"].v-list-item');
-  await listItems.first().waitFor({ state: 'attached', timeout: 10_000 });
+  try {
+    await listItems.first().waitFor({ state: 'attached', timeout: 10_000 });
+  } catch (_error) {
+    logEarlyReturn('Lottery list exists but contains no entries.');
+    return [];
+  }
   const itemsCount = await listItems.count();
   if (itemsCount === 0) {
     console.log('No cancellation items found.');
