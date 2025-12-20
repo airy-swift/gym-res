@@ -14,6 +14,7 @@ const SCHOOL_URLS = [
 ];
 
 const JST_TIMEZONE = 'Asia/Tokyo';
+const DETAIL_PAGE_CONCURRENCY = 10;
 
 export async function runSeekLotComparePage(
   page: Page,
@@ -42,6 +43,7 @@ export async function runSeekLotComparePage(
     await new Promise(resolve => setTimeout(resolve, 2_000));
     const lotteryLinks = page.locator('a.AvailabilityFrames_dayFrame_content.is-lot');
     const count = await lotteryLinks.count();
+    const targetUrls: string[] = [];
     
     for (let j = 0; j < count; j++) {
       const lotteryLink = lotteryLinks.nth(j);
@@ -49,7 +51,23 @@ export async function runSeekLotComparePage(
       if (!href) {
         continue;
       }
-      const targetUrl = buildAbsoluteUrl(href);
+      targetUrls.push(buildAbsoluteUrl(href));
+    }
+
+    // bot判定をお気持ちで避けたいのでシャッフルしてせめてもの抵抗をする
+    shuffleInPlace(targetUrls);
+
+    const targetCount = targetUrls.length;
+    if (targetCount === 0) {
+      continue;
+    }
+
+    console.log(`🔍 詳細チェック開始 ${formatCurrentJst()} 件数:${targetCount}`);
+    let processedCount = 0;
+
+    shuffleInPlace(targetUrls);
+
+    await processWithConcurrency(targetUrls, DETAIL_PAGE_CONCURRENCY, async targetUrl => {
       const detailPage = await page.context().newPage();
       let seekLots: {count: number, entry: RepresentativeEntry}[] | undefined;
       try {
@@ -95,7 +113,14 @@ export async function runSeekLotComparePage(
             }
           });
       }
-    }
+
+      processedCount += 1;
+      if (processedCount % 50 === 0) {
+        console.log(`  残り${Math.max(targetCount - processedCount, 0)}件`);
+      }
+    });
+
+    console.log(`✅ 詳細チェック完了 ${formatCurrentJst()} 件数:${targetCount}`);
   }
   
   return results
@@ -113,6 +138,10 @@ function buildAbsoluteUrl(href: string): string {
     console.warn('Failed to build absolute URL for lot link', href, error);
     return 'https://yoyaku.harp.lg.jp';
   }
+}
+
+function formatCurrentJst(): string {
+  return new Date().toLocaleString('ja-JP', { timeZone: JST_TIMEZONE });
 }
 
 function formatJapaneseDate(rawDate: string): string {
@@ -141,5 +170,26 @@ function logAdopted(entry: RepresentativeEntry, count: number): void {
 }
 
 function logRejected(entry: RepresentativeEntry, count: number): void {
-  console.log(`  見送り 応募数:${count} 施設:${entry.gymName}`);
+  console.log(`  見送り ${formatEntryLog(entry, count)}`);
+}
+
+async function processWithConcurrency<T>(items: T[], limit: number, handler: (item: T, index: number) => Promise<void>): Promise<void> {
+  if (items.length === 0 || limit <= 0) {
+    return;
+  }
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      await handler(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+}
+
+function shuffleInPlace<T>(array: T[]): void {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
 }
