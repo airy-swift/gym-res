@@ -45,9 +45,19 @@ export async function runFacilityAvailabilityPage(page: Page, entry: Representat
 async function getMatchingRow(
   page: Page,
   room: string,
-  booth?: string
+  booth?: string,
 ): Promise<number> {
-  const targetLabel = normalizeLabel(booth ?? room);
+  if (booth) {
+    return locateBoothRow(page, booth);
+  }
+
+  return 3;
+  // const roomHeadIndex = await locateRoomHeadRow(page, room);
+  // return roomHeadIndex + 2;
+}
+
+async function locateBoothRow(page: Page, booth: string): Promise<number> {
+  const normalizedTarget = normalizeLabel(booth);
 
   const labels: string[] = await page
     .locator('table.AvailabilityFrames_gridTable tr')
@@ -62,12 +72,40 @@ async function getMatchingRow(
 
   for (let i = 0; i < labels.length; i += 1) {
     if (!labels[i]) continue;
-    if (normalizeLabel(labels[i]) === targetLabel) {
+    if (normalizeLabel(labels[i]) === normalizedTarget) {
       return i;
     }
   }
 
   throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
+}
+
+
+async function locateRoomHeadRow(page: Page, room: string): Promise<number> {
+  const index = await page
+    .locator('table.AvailabilityFrames_gridTable tr')
+    .evaluateAll((trs, roomText) => {
+      const target = (roomText ?? '').trim();
+
+      for (let i = 0; i < trs.length; i++) {
+        const tr = trs[i] as HTMLTableRowElement;
+        const btn = tr.querySelector('button.AvailabilityFrames_textBtn .v-btn__content');
+        if (!btn) continue;
+
+        const label = (btn.textContent ?? '').trim();
+        if (label === target) {
+          return i;
+        }
+      }
+
+      return -1;
+    }, room);
+
+  if (index === -1) {
+    throwLoggedError('[runFacilityAvailabilityPage:No.3] 対象の行位置を特定できませんでした。');
+  }
+
+  return index;
 }
 
 

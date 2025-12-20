@@ -14,10 +14,6 @@ export async function runFacilityAvailabilityComparisonPage(page: Page, entry: R
   await waitForTutorial(page);
 
   const parts = splitRoomAndBooth(entry.room);
-  if (!parts.booth) {
-    throwLoggedError('[runFacilityAvailabilityComparisonPage] ブース情報が不足しているため比較ページの行を特定できません。');
-  }
-
   const desiredDateIso = deriveUdParam(entry.date);
   if (!desiredDateIso) {
     throwLoggedError(`[runFacilityAvailabilityComparisonPage] 予約日付形式が不正です: ${entry.date}`);
@@ -44,7 +40,7 @@ function splitRoomAndBooth(room: string): RoomParts {
   }
 
   if (segments.length === 1) {
-    return { booth: segments[0] };
+    return { booth: undefined };
   }
 
   const booth = segments.pop();
@@ -54,6 +50,9 @@ function splitRoomAndBooth(room: string): RoomParts {
 }
 
 async function findBoothRow(page: Page, normalizedBoothName: string): Promise<Locator> {
+  if (normalizedBoothName === '') {
+    return page.locator(COMPARISON_TABLE_ROWS).nth(3);
+  }
   const rows = page.locator(COMPARISON_TABLE_ROWS);
 
   const labels: string[] = await rows.evaluateAll((trs) =>
@@ -101,7 +100,6 @@ function normalizeComparisonLabel(value?: string | null): string {
 async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string): Promise<void> {
   const links = row.locator('a.AvailabilityFrames_dayFrame_content');
   const linkCount = await links.count();
-
   for (let i = 0; i < linkCount; i += 1) {
     const link = links.nth(i);
     const title = await link.getAttribute('title');
