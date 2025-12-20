@@ -242,7 +242,7 @@ async function persistLogFile(
   if (cancelMessage) {
     logLines.push(cancelMessage);
   }
-  const logContent = logLines.join('\n');
+  const logContent = logLines.join('<br>');
 
   try {
     await fs.writeFile(LOG_FILE_PATH, logContent, 'utf8');

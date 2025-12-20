@@ -15,6 +15,8 @@ type StartJobFormProps = {
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
+// Set to a job id to force showing its result for design/debug work.
+const DEBUG_RESULT_JOB_ID = "";
 
 type JobDocumentData = {
   status?: string;
@@ -420,6 +422,57 @@ export function StartJobForm({
   }, [firestore]);
 
   useEffect(() => {
+    if (!DEBUG_RESULT_JOB_ID) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadDebugResultJob() {
+      try {
+        const snapshot = await getDoc(doc(firestore, "jobs", DEBUG_RESULT_JOB_ID));
+
+        if (!snapshot.exists()) {
+          console.warn(
+            `[StartJobForm] DEBUG_RESULT_JOB_ID=${DEBUG_RESULT_JOB_ID} not found or inaccessible`,
+          );
+          return;
+        }
+
+        const data = snapshot.data() as JobDocumentData | undefined;
+        const status = data?.status ?? null;
+        const message = data?.message ?? null;
+        const progress = typeof data?.progress === "string" ? data?.progress : null;
+
+        if (!status || status === "pending") {
+          console.warn(`[StartJobForm] DEBUG_RESULT_JOB_ID=${DEBUG_RESULT_JOB_ID} has no final status`);
+          return;
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        clearCachedJobState();
+        latestJobIdRef.current = DEBUG_RESULT_JOB_ID;
+        setJobId(null);
+        setJobStatus(status);
+        setJobResult({ status, message });
+        setJobProgress(progress ?? null);
+        setJobHtmlUrl(null);
+      } catch (error) {
+        console.error("Failed to load debug job result", error);
+      }
+    }
+
+    void loadDebugResultJob();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [firestore]);
+
+  useEffect(() => {
     if (jobResult?.status !== "failed") {
       setDebugImageState("idle");
       return;
@@ -488,6 +541,9 @@ export function StartJobForm({
 
   const isJobPending = jobStatus === "pending";
   const shouldShowForm = !jobResult;
+  const formattedJobResultMessage = jobResult?.message
+    ? jobResult.message.replace(/<br\s*\/?\>/gi, "\n")
+    : null;
 
   return (
     <>
@@ -571,12 +627,16 @@ export function StartJobForm({
               {jobResult?.status === "completed" ? (
                 <>
                   <p className="text-lg font-semibold text-stone-900">抽選応募完了！</p>
-                  <p className="text-base text-stone-600">{jobResult.message ?? "特に言うことないです"}</p>
+                  <p className="text-base text-stone-600 whitespace-pre-line">
+                    {formattedJobResultMessage ?? "特に言うことないです"}
+                  </p>
                 </>
               ) : (
                 <>
                   <p className="text-lg font-semibold text-red-600">応募が失敗しました (failed)</p>
-                  <p className="text-base text-stone-600">{jobResult?.message ?? "何らかのエラーが発生しました。"}</p>
+                  <p className="text-base text-stone-600 whitespace-pre-line">
+                    {formattedJobResultMessage ?? "何らかのエラーが発生しました。"}
+                  </p>
                   {jobDebugImageUrl ? (
                     <div className="mt-4 space-y-2">
                       <p className="text-xs text-stone-500">デバッグスクリーンショット</p>
