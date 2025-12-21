@@ -12,6 +12,7 @@ export async function runFacilityAvailabilityComparisonPage(page: Page, entry: R
   });
 
   await waitForTutorial(page);
+  await page.locator('table.AvailabilityFrames_gridTable').first().waitFor({ state: 'visible', timeout: 10_000 });
 
   const parts = splitRoomAndBooth(entry.room);
   const desiredDateIso = deriveUdParam(entry.date);
