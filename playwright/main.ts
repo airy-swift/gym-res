@@ -65,7 +65,7 @@ export async function main(): Promise<void> {
     const context = await browser.newContext({
       locale: 'ja-JP',
       timezoneId: 'Asia/Tokyo',
-      viewport: { width: 2700, height: 1080 },
+      viewport: { width: 3000, height: 1080 },
     });
     page = await context.newPage();
 
@@ -108,7 +108,6 @@ export async function main(): Promise<void> {
         const normalizedRequested = normalizeEntry(requested);
         return (
           normalizedRequested.gymName === normalizedEntry.gymName &&
-          normalizedRequested.room === normalizedEntry.room &&
           normalizedRequested.date === normalizedEntry.date &&
           normalizedRequested.time === normalizedEntry.time
         );
