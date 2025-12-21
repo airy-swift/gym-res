@@ -125,6 +125,7 @@ async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string
   throwLoggedError('[runFacilityAvailabilityComparisonPage] 希望する日付の抽選枠を比較ページで見つけられませんでした。');
 }
 
+
 async function ensureLinkVisible(link: Locator): Promise<void> {
   await link.evaluate(element => {
     element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
