@@ -48,6 +48,7 @@ export function StartJobForm({
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const [jobResult, setJobResult] = useState<{ status: string; message: string | null } | null>(null);
@@ -618,16 +619,26 @@ export function StartJobForm({
             <label htmlFor="password" className="text-sm font-medium text-stone-600">
               パスワード
             </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              placeholder="********"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
-              required
-            />
+            <div className="relative">
+              <input
+                id="password"
+                name="password"
+                type={isPasswordVisible ? "text" : "password"}
+                placeholder="********"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 pr-16 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setIsPasswordVisible((prev) => !prev)}
+                aria-pressed={isPasswordVisible}
+                className="absolute inset-y-0 right-3 my-auto text-xs font-semibold text-stone-500 transition hover:text-stone-700"
+              >
+                {isPasswordVisible ? "隠す" : "表示"}
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">

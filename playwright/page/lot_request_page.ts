@@ -39,9 +39,10 @@ export async function runLotRequestPage(
   await badmintonOption.click();
 
   // await new Promise(resolve => setTimeout(resolve, 3_000));
-  const participantsInput = page.locator('#input-55');
+  const participantsInput = page.getByLabel('利用人数');
   await participantsInput.waitFor({ state: 'visible', timeout: 10_000 });
   await participantsInput.fill('20');
+
 
 
   const confirmButton = page.getByRole('button', { name: '確認' });

@@ -28,7 +28,9 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   const [status, setStatus] = useState<UploadStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [entries, setEntries] = useState<RepresentativeEntry[]>(() => sortEntries(initialEntries));
+  const [entries, setEntries] = useState<RepresentativeEntry[]>(() =>
+    sortEntries(formatEntriesForPersistence(initialEntries)),
+  );
   const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
   const [editingEntry, setEditingEntry] = useState<RepresentativeEntry | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -118,10 +120,9 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
       }
 
       const mergedEntries = sortEntries([...entries, ...parsedEntries]);
+      const savedEntries = await saveEntriesToGroup(groupId, mergedEntries);
 
-      await saveEntriesToGroup(groupId, mergedEntries);
-
-      setEntries(mergedEntries);
+      setEntries(savedEntries);
       showToast("データベースに追加しました");
       setStatus("success");
     } catch (uploadError) {
@@ -171,8 +172,8 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     }
 
     const updatedEntries = entries.filter((_, entryIndex) => entryIndex !== index);
-    await saveEntriesToGroup(groupId, updatedEntries);
-    setEntries(updatedEntries);
+    const savedEntries = await saveEntriesToGroup(groupId, updatedEntries);
+    setEntries(savedEntries);
     showToast("データベースから削除しました");
   }, [entries, groupId, showToast]);
 
@@ -189,8 +190,8 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     const updatedEntries = sortEntries(
       entries.map((entry, index) => (index === editingIndex ? editingEntry : entry)),
     );
-    await saveEntriesToGroup(groupId, updatedEntries);
-    setEntries(updatedEntries);
+    const savedEntries = await saveEntriesToGroup(groupId, updatedEntries);
+    setEntries(savedEntries);
     showToast("データベースを更新しました");
     handleDialogClose();
   }, [editingEntry, editingIndex, entries, groupId, handleDialogClose, showToast]);
@@ -664,9 +665,42 @@ function parseEntriesFromGeminiText(text: string): RepresentativeEntry[] | null 
     .filter((entry: RepresentativeEntry) => entry.gymName || entry.room || entry.date || entry.time);
 }
 
-async function saveEntriesToGroup(groupId: string, entries: RepresentativeEntry[]) {
+function formatEntriesForPersistence(entries: RepresentativeEntry[]): RepresentativeEntry[] {
+  return entries.map((entry) => ({
+    ...entry,
+    room: formatRoomLabel(entry.room),
+  }));
+}
+
+function formatRoomLabel(rawRoom: string | undefined | null): string {
+  if (!rawRoom) {
+    return "";
+  }
+
+  const noWhitespace = rawRoom.replace(/\s+/g, "");
+
+  if (!noWhitespace) {
+    return "";
+  }
+
+  const halfWidthSlash = noWhitespace.replace(/[／∕⁄]/g, "/");
+  const convertedLetters = halfWidthSlash.replace(/[A-Za-z]/g, (character) =>
+    String.fromCharCode(character.charCodeAt(0) + 0xfee0),
+  );
+  const spacedSlash = convertedLetters.replace(/\//g, " / ");
+  const normalizedSpaces = spacedSlash.replace(/\s{2,}/g, " ");
+
+  return normalizedSpaces.trim();
+}
+
+async function saveEntriesToGroup(
+  groupId: string,
+  entries: RepresentativeEntry[],
+): Promise<RepresentativeEntry[]> {
+  const formattedEntries = formatEntriesForPersistence(entries);
   const db = getFirestoreDb();
   await updateDoc(doc(db, "groups", groupId), {
-    list: entries,
+    list: formattedEntries,
   });
+  return formattedEntries;
 }
