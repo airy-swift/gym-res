@@ -117,12 +117,32 @@ async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string
       continue;
     }
 
-    await link.scrollIntoViewIfNeeded().catch(() => undefined);
+    await ensureLinkVisible(link);
     await link.click();
     return;
   }
 
   throwLoggedError('[runFacilityAvailabilityComparisonPage] 希望する日付の抽選枠を比較ページで見つけられませんでした。');
+}
+
+async function ensureLinkVisible(link: Locator): Promise<void> {
+  await link.evaluate(element => {
+    element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+
+    let parent = element.parentElement;
+    while (parent) {
+      if (parent instanceof HTMLElement && parent.scrollWidth > parent.clientWidth + 5) {
+        const elementRect = element.getBoundingClientRect();
+        const parentRect = parent.getBoundingClientRect();
+        const horizontalDelta = (elementRect.left - parentRect.left) - (parent.clientWidth / 2) + (elementRect.width / 2);
+        parent.scrollLeft += horizontalDelta;
+        const verticalDelta = (elementRect.top - parentRect.top) - (parent.clientHeight / 2) + (elementRect.height / 2);
+        parent.scrollTop += verticalDelta;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+  });
 }
 
 async function resolveSlotDate(link: Locator): Promise<string | undefined> {
