@@ -13,6 +13,7 @@ export async function runFacilityAvailabilityComparisonPage(page: Page, entry: R
 
   await waitForTutorial(page);
   await page.locator('table.AvailabilityFrames_gridTable').first().waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForTimeout(1_000);
 
   const parts = splitRoomAndBooth(entry.room);
   const desiredDateIso = deriveUdParam(entry.date);
@@ -25,7 +26,7 @@ export async function runFacilityAvailabilityComparisonPage(page: Page, entry: R
   await boothRow.scrollIntoViewIfNeeded().catch(() => undefined);
   await boothRow.waitFor({ state: 'visible', timeout: 5_000 });
 
-  await clickAvailableComparisonSlot(boothRow, desiredDateIso);
+  await clickAvailableComparisonSlot(page, boothRow, desiredDateIso);
 }
 
 type RoomParts = { booth?: string };
@@ -102,7 +103,7 @@ function normalizeComparisonLabel(value?: string | null): string {
   return normalizeText(normalized);
 }
 
-async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string): Promise<void> {
+async function clickAvailableComparisonSlot(page: Page, row: Locator, desiredDateIso: string): Promise<void> {
   const links = row.locator('a.AvailabilityFrames_dayFrame_content');
   const linkCount = await links.count();
   for (let i = 0; i < linkCount; i += 1) {
@@ -118,8 +119,16 @@ async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string
     }
 
     await ensureLinkVisible(link);
-    await link.click();
-    return;
+    const clicked = await tryClick(link);
+    if (clicked) {
+      return;
+    }
+
+    await page.waitForTimeout(1_000);
+    await scrollComparisonTable(page, 'right');
+    if (await tryClick(link)) {
+      return;
+    }
   }
 
   throwLoggedError('[runFacilityAvailabilityComparisonPage] 希望する日付の抽選枠を比較ページで見つけられませんでした。');
@@ -129,21 +138,44 @@ async function clickAvailableComparisonSlot(row: Locator, desiredDateIso: string
 async function ensureLinkVisible(link: Locator): Promise<void> {
   await link.evaluate(element => {
     element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-
-    let parent = element.parentElement;
-    while (parent) {
-      if (parent instanceof HTMLElement && parent.scrollWidth > parent.clientWidth + 5) {
-        const elementRect = element.getBoundingClientRect();
-        const parentRect = parent.getBoundingClientRect();
-        const horizontalDelta = (elementRect.left - parentRect.left) - (parent.clientWidth / 2) + (elementRect.width / 2);
-        parent.scrollLeft += horizontalDelta;
-        const verticalDelta = (elementRect.top - parentRect.top) - (parent.clientHeight / 2) + (elementRect.height / 2);
-        parent.scrollTop += verticalDelta;
-        break;
-      }
-      parent = parent.parentElement;
-    }
   });
+}
+
+async function tryClick(link: Locator): Promise<boolean> {
+  try {
+    await link.click();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function scrollComparisonTable(page: Page, direction: 'left' | 'right'): Promise<void> {
+  const table = page.locator('.AvailabilityFrames_gridTable');
+await table.waitFor({ state: 'visible' });
+
+const scrolled = await table.evaluateHandle((el) => {
+  // el を起点に、横スクロール可能な祖先（含む）を探す
+  const isScrollableX = (x: Element) => {
+    const s = getComputedStyle(x);
+    const overflowX = s.overflowX;
+    const canScroll = (overflowX === 'auto' || overflowX === 'scroll');
+    return canScroll && (x as HTMLElement).scrollWidth > (x as HTMLElement).clientWidth + 1;
+  };
+
+  let cur: Element | null = el;
+  while (cur) {
+    if (isScrollableX(cur)) return cur as HTMLElement;
+    cur = cur.parentElement;
+  }
+  return el as HTMLElement; // fallback
+});
+
+await scrolled.evaluate((scroller: HTMLElement) => {
+  scroller.scrollLeft = scroller.scrollWidth;
+});
+
+  
 }
 
 async function resolveSlotDate(link: Locator): Promise<string | undefined> {

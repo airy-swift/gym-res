@@ -65,6 +65,7 @@ export async function main(): Promise<void> {
     const context = await browser.newContext({
       locale: 'ja-JP',
       timezoneId: 'Asia/Tokyo',
+      viewport: { width: 2700, height: 1080 },
     });
     page = await context.newPage();
 
