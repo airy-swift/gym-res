@@ -51,10 +51,14 @@ function splitRoomAndBooth(room: string): RoomParts {
 }
 
 async function findBoothRow(page: Page, normalizedBoothName: string): Promise<Locator> {
-  if (normalizedBoothName === '') {
+  if (normalizedBoothName === '' || normalizedBoothName === '全面') {
     return page.locator(COMPARISON_TABLE_ROWS).nth(3);
   }
   const rows = page.locator(COMPARISON_TABLE_ROWS);
+  // const fallbackCount = await rows.count();
+  // if (fallbackCount === 3) {
+  //   return rows.nth(2);
+  // }
 
   const labels: string[] = await rows.evaluateAll((trs) =>
     trs.map((tr) => {
