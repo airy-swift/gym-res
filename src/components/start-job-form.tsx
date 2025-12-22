@@ -824,6 +824,10 @@ function buildDebugImageUrl(jobId: string | null): string | null {
 }
 
 function formatEntryOptionLabel(value: number, representativeCount: number): string {
+  if (value === 16) {
+    return "16 (上限突破トライ)";
+  }
+
   if (representativeCount <= 0) {
     return String(value);
   }
