@@ -3,7 +3,7 @@ import Link from "next/link";
 import { StartJobForm } from "@/components/start-job-form";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
-const numbers = Array.from({ length: 16 }, (_, index) => index + 1);
+const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
 
 type HomePageSearchParams = {
   gp?: string;
