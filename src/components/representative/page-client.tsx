@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { ChangeEvent, DragEvent } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
@@ -34,9 +34,12 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   const [toast, setToast] = useState<{ message: string; tone: "success" | "error" } | null>(null);
   const [editingEntry, setEditingEntry] = useState<RepresentativeEntry | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
   const editingDateInputValue = useMemo(() => convertDisplayDateToInput(editingEntry?.date), [editingEntry?.date]);
   const editingTimeRange = useMemo(() => getTimeRangeParts(editingEntry?.time), [editingEntry?.time]);
+  const isCreatingNewEntry = editingEntry != null && editingIndex === null;
+  const dialogTitle = isCreatingNewEntry ? "応募先の追加" : "応募先の編集";
 
   const showToast = useCallback((message: string, tone: "success" | "error" = "success") => {
     if (toastTimeoutRef.current !== null) {
@@ -165,6 +168,20 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     setEditingEntry(entries[index]);
   }, [entries]);
 
+  const handleManualAdd = useCallback(() => {
+    setEditingIndex(null);
+    setEditingEntry({ gymName: "", room: "", date: "", time: "" });
+  }, []);
+
+  const handleUploadButtonClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileInputChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    handleFiles(event.target.files);
+    event.target.value = "";
+  }, [handleFiles]);
+
   const handleDelete = useCallback(async (index: number) => {
     const confirmed = window.confirm("この候補を削除しますか？");
     if (!confirmed) {
@@ -183,16 +200,18 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
   }, []);
 
   const handleDialogSave = useCallback(async () => {
-    if (editingEntry == null || editingIndex == null) {
+    if (editingEntry == null) {
       return;
     }
 
-    const updatedEntries = sortEntries(
-      entries.map((entry, index) => (index === editingIndex ? editingEntry : entry)),
-    );
+    const nextEntries =
+      editingIndex === null
+        ? [...entries, editingEntry]
+        : entries.map((entry, index) => (index === editingIndex ? editingEntry : entry));
+    const updatedEntries = sortEntries(nextEntries);
     const savedEntries = await saveEntriesToGroup(groupId, updatedEntries);
     setEntries(savedEntries);
-    showToast("データベースを更新しました");
+    showToast(editingIndex === null ? "データベースに追加しました" : "データベースを更新しました");
     handleDialogClose();
   }, [editingEntry, editingIndex, entries, groupId, handleDialogClose, showToast]);
 
@@ -242,11 +261,35 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Representative</p>
         <h1 className="text-2xl font-semibold text-stone-900">サークル: {groupName ?? groupId}</h1>
 
+        <div className="flex flex-wrap gap-3 text-sm">
+          <button
+            type="button"
+            onClick={handleUploadButtonClick}
+            className="inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600"
+          >
+            📤 画像をアップロード
+          </button>
+          <button
+            type="button"
+            onClick={handleManualAdd}
+            className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 font-semibold text-stone-700 transition hover:border-stone-400 hover:text-stone-900"
+          >
+            ➕ 手動で追加
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*"
+            onChange={handleFileInputChange}
+          />
+        </div>
+
         <div className="space-y-3 rounded-3xl border border-stone-200 bg-white/70 p-6">
           <p className="text-sm font-semibold text-stone-700">抽選応募先 (メンバーがコレを利用したときこのリストのそれぞれに応募します)</p>
 
           {entries.length === 0 ? (
-            <p className="text-sm text-stone-500">まだ解析結果はありません。予約画像をドロップして登録してください。</p>
+            <p className="text-sm text-stone-500">まだ解析結果はありません。予約画像をアップロードするか、手動で追加してください。</p>
           ) : (
             <ul className="space-y-3 text-sm text-stone-800">
               {entries.map((entry, index) => (
@@ -311,7 +354,7 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
       {editingEntry != null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 backdrop-blur-sm">
           <div className="w-full max-w-md space-y-4 rounded-[32px] border border-stone-200 bg-white px-8 py-10 text-stone-900 shadow-2xl">
-            <h2 className="text-lg font-semibold">応募先の編集</h2>
+            <h2 className="text-lg font-semibold">{dialogTitle}</h2>
 
             <div className="space-y-2 text-sm">
               <label className="block text-xs font-semibold text-stone-600" htmlFor="edit-gymName">
