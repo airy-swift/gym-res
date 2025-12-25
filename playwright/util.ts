@@ -135,6 +135,41 @@ export async function updateJobProgress(progress: string): Promise<void> {
   }
 }
 
+export async function cleanupJobCredentials(): Promise<void> {
+  const jobId = process.env.JOB_ID;
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!jobId) {
+    logEarlyReturn('JOB_ID is not set; skipping job cleanup.');
+    return;
+  }
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping job cleanup.');
+    return;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/jobs/cleanup`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        API_TOKEN: apiToken,
+      },
+      body: JSON.stringify({ jobId }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to cleanup job credentials (status ${response.status}): ${text}`);
+    }
+  } catch (error) {
+    logEarlyReturn(`Failed to cleanup job credentials: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 export function deriveUdParam(dateText: string): string | null {
   const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   if (!match) {

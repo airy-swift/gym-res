@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { captureScreenshot, fetchJob, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
+import { captureScreenshot, cleanupJobCredentials, fetchJob, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
@@ -77,6 +77,7 @@ export async function main(): Promise<void> {
 
     await page.goto(CANCEL_URL, { waitUntil: 'domcontentloaded' });
     await runLoginPage(page);
+    await cleanupJobCredentials();
     await new Promise((resolve) => setTimeout(resolve, 1_000));
 
     // 代表が予約して欲しい枠
