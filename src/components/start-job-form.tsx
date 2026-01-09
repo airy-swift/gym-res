@@ -44,7 +44,10 @@ export function StartJobForm({
 }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
-  const [entryCount, setEntryCount] = useState(() => resolveDefaultEntryCount(entryOptions, defaultEntryCount));
+  const [entryCount, setEntryCount] = useState(() => {
+    const dateBasedDefault = selectDateBasedEntryCount(entryOptions);
+    return resolveDefaultEntryCount(entryOptions, dateBasedDefault ?? defaultEntryCount);
+  });
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -841,6 +844,17 @@ function formatEntryOptionLabel(value: number, representativeCount: number): str
   }
 
   return String(value);
+}
+
+function selectDateBasedEntryCount(entryOptions: number[]): number | undefined {
+  const today = new Date();
+  const preferred = today.getDate() <= 15 ? 10 : 15;
+
+  if (entryOptions.includes(preferred)) {
+    return preferred;
+  }
+
+  return undefined;
 }
 
 function resolveDefaultEntryCount(entryOptions: number[], fallback?: number): number {
