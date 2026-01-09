@@ -138,7 +138,7 @@ jobs:
             --arg message "$MESSAGE" \
             '{jobId: $jobId, status: $status, message: $message}')
 
-          curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
+          curl -sSf -X PATCH "$API_BASE_URL/api/internal/jobs" \
             -H 'Content-Type: application/json' \
             -H "API_TOKEN: $API_TOKEN" \
             -d "$PAYLOAD"
@@ -162,7 +162,7 @@ jobs:
             --arg message "$MESSAGE" \
             '{jobId: $jobId, status: $status, message: $message}')
 
-          curl -sSf -X PATCH "$API_BASE_URL/api/jobs" \
+          curl -sSf -X PATCH "$API_BASE_URL/api/internal/jobs" \
             -H 'Content-Type: application/json' \
             -H "API_TOKEN: $API_TOKEN" \
             -d "$PAYLOAD"
