@@ -67,6 +67,13 @@ jobs:
           echo "ENTRY_COUNT=$ENTRY_COUNT" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_GROUP_ID=$GROUP_ID" >> "$GITHUB_ENV"
 
+      - name: Install Playwright dependencies
+        run: |
+          set -euo pipefail
+          npm install
+          npx playwright install --with-deps
+        working-directory: playwright
+
       - name: Run reservation job
         id: run_reservation
         env:
@@ -77,11 +84,6 @@ jobs:
           LINE_ACCESS_TOKEN: ${{ env.LINE_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          SERVICE_USER="$SERVICE_USER" \
-          SERVICE_PASS="$SERVICE_PASS" \
-          ENTRY_COUNT="$ENTRY_COUNT" \
-          npm install
-          npx playwright install --with-deps
           xvfb-run -a npm run play 2>&1 | tee play.log
         working-directory: playwright
         continue-on-error: true
