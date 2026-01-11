@@ -103,21 +103,24 @@ jobs:
             echo 'EOF'
           } >> "$GITHUB_ENV"
 
-      - name: Commit debug screenshot
+      - name: Commit debug screenshots
         if: always()
         run: |
           set -euo pipefail
-          if [ -f playwright/debug.png ]; then
-            git add playwright/debug.png
-            if git diff --cached --quiet; then
-              echo 'No screenshot changes to commit.'
-              git reset HEAD --quiet
-            else
-              git commit -m "Add debug screenshot for job $JOB_ID (run $GITHUB_RUN_ID)"
-              git push origin "$JOB_BRANCH"
-            fi
-          else
+          shopt -s nullglob
+          screenshots=(playwright/debug*.png)
+          if [ ${#screenshots[@]} -eq 0 ]; then
             echo 'No debug screenshot to commit.'
+            exit 0
+          fi
+
+          git add "${screenshots[@]}"
+          if git diff --cached --quiet; then
+            echo 'No screenshot changes to commit.'
+            git reset HEAD --quiet
+          else
+            git commit -m "Add debug screenshot for job $JOB_ID (run $GITHUB_RUN_ID)"
+            git push origin "$JOB_BRANCH"
           fi
 
       - name: Update job status on failure

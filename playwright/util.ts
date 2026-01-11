@@ -3,8 +3,12 @@ import https from 'node:https';
 
 import type { Job, RepresentativeEntry } from './types';
 
+const screenshotCounters: Record<string, number> = {};
+
 export async function captureScreenshot(page: Page, label: string): Promise<void> {
-  await page.screenshot({ path: `${label}.png`, fullPage: true });
+  const nextIndex = (screenshotCounters[label] ?? 0) + 1;
+  screenshotCounters[label] = nextIndex;
+  await page.screenshot({ path: `${label}${nextIndex}.png`, fullPage: true });
 }
 
 export function logEarlyReturn(message: string): void {

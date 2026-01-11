@@ -544,51 +544,41 @@ export function StartJobForm({
     let isCancelled = false;
     let attemptCount = 0;
     const maxAttempts = 6;
+    const retryDelay = 2000;
+    let retryTimeoutId: number | null = null;
 
-    const loadDebugImage = () => {
+    const loadDebugImage = async () => {
       if (isCancelled) {
         return;
       }
 
-      const nextUrl = buildDebugImageUrl(jobIdForDebug);
+      const nextUrl = await resolveLatestDebugScreenshotUrl(jobIdForDebug);
 
-      if (!nextUrl) {
-        setDebugImageState("unavailable");
+      if (isCancelled) {
         return;
       }
 
-      const image = new window.Image();
-
-      image.onload = () => {
-        if (isCancelled) {
-          return;
-        }
-
+      if (nextUrl) {
         setJobDebugImageUrl(nextUrl);
         setDebugImageState("idle");
-      };
+        return;
+      }
 
-      image.onerror = () => {
-        if (isCancelled) {
-          return;
-        }
-
-        attemptCount += 1;
-
-        if (attemptCount < maxAttempts) {
-          window.setTimeout(loadDebugImage, 2000);
-        } else {
-          setDebugImageState("unavailable");
-        }
-      };
-
-      image.src = nextUrl;
+      attemptCount += 1;
+      if (attemptCount < maxAttempts) {
+        retryTimeoutId = window.setTimeout(loadDebugImage, retryDelay);
+      } else {
+        setDebugImageState("unavailable");
+      }
     };
 
-    loadDebugImage();
+    void loadDebugImage();
 
     return () => {
       isCancelled = true;
+      if (retryTimeoutId !== null) {
+        window.clearTimeout(retryTimeoutId);
+      }
     };
   }, [jobResult]);
 
@@ -817,13 +807,56 @@ export function StartJobForm({
   );
 }
 
-function buildDebugImageUrl(jobId: string | null): string | null {
-  if (!jobId) {
+async function resolveLatestDebugScreenshotUrl(jobId: string): Promise<string | null> {
+  if (!jobId || typeof window === "undefined") {
     return null;
   }
 
   const cacheBust = Date.now();
-  return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/debug.png?ts=${cacheBust}`;
+  const maxScreenshots = 10;
+  let latestUrl: string | null = null;
+
+  for (let index = 1; index <= maxScreenshots; index += 1) {
+    const candidateUrl = buildDebugImageUrl(jobId, index, cacheBust);
+    if (!candidateUrl) {
+      break;
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await doesImageExist(candidateUrl);
+    if (!exists) {
+      break;
+    }
+    latestUrl = candidateUrl;
+  }
+
+  if (latestUrl) {
+    return latestUrl;
+  }
+
+  const fallbackUrl = buildDebugImageUrl(jobId, undefined, cacheBust);
+  if (!fallbackUrl) {
+    return null;
+  }
+  return (await doesImageExist(fallbackUrl)) ? fallbackUrl : null;
+}
+
+function buildDebugImageUrl(jobId: string | null, index?: number, cacheBust?: number): string | null {
+  if (!jobId) {
+    return null;
+  }
+
+  const filename = typeof index === "number" ? `debug${index}.png` : "debug.png";
+  const cacheBustingKey = cacheBust ?? Date.now();
+  return `https://raw.githubusercontent.com/airy-swift/gym-res/${jobId}/playwright/${filename}?ts=${cacheBustingKey}`;
+}
+
+function doesImageExist(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new window.Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = url;
+  });
 }
 
 function formatEntryOptionLabel(value: number, representativeCount: number): string {

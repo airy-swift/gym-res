@@ -194,6 +194,21 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
     showToast("データベースから削除しました");
   }, [entries, groupId, showToast]);
 
+  const handleDeleteAll = useCallback(async () => {
+    if (entries.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm("抽選応募先のリストをすべて削除しますか？");
+    if (!confirmed) {
+      return;
+    }
+
+    const savedEntries = await saveEntriesToGroup(groupId, []);
+    setEntries(savedEntries);
+    showToast("抽選応募先を空にしました");
+  }, [entries.length, groupId, showToast]);
+
   const handleDialogClose = useCallback(() => {
     setEditingEntry(null);
     setEditingIndex(null);
@@ -261,20 +276,30 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Representative</p>
         <h1 className="text-2xl font-semibold text-stone-900">サークル: {groupName ?? groupId}</h1>
 
-        <div className="flex flex-wrap gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3 text-sm sm:justify-between">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleUploadButtonClick}
+              className="inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600"
+            >
+              📤 画像をアップロード
+            </button>
+            <button
+              type="button"
+              onClick={handleManualAdd}
+              className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 font-semibold text-stone-700 transition hover:border-stone-400 hover:text-stone-900"
+            >
+              ➕ 手動で追加
+            </button>
+          </div>
           <button
             type="button"
-            onClick={handleUploadButtonClick}
-            className="inline-flex items-center gap-2 rounded-full border border-sky-500 bg-sky-500 px-4 py-2 font-semibold text-white transition hover:bg-sky-600"
+            onClick={handleDeleteAll}
+            disabled={entries.length === 0}
+            className="inline-flex items-center gap-2 rounded-full border border-red-200 bg-white px-4 py-2 font-semibold text-red-600 transition hover:border-red-400 hover:text-red-700 disabled:cursor-not-allowed disabled:border-stone-200 disabled:text-stone-300 sm:ml-auto"
           >
-            📤 画像をアップロード
-          </button>
-          <button
-            type="button"
-            onClick={handleManualAdd}
-            className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-white px-4 py-2 font-semibold text-stone-700 transition hover:border-stone-400 hover:text-stone-900"
-          >
-            ➕ 手動で追加
+            🧹 全て削除
           </button>
           <input
             ref={fileInputRef}
