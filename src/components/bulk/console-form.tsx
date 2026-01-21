@@ -33,6 +33,8 @@ type BulkJobItem = {
   progress?: string | null;
   message?: string | null;
   localStatus: BulkJobLocalStatus;
+  startedAt?: number | null;
+  elapsedSeconds?: number;
 };
 
 const DEFAULT_PLACEHOLDER = `1行目からいきなりid,passwordの形式で入力してください。下記の感じ↓\n00112233,password123\n44556677,password456`;
@@ -75,10 +77,54 @@ export function BulkConsoleForm({
   const [jobItems, setJobItems] = useState<BulkJobItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setEntryCount(resolvedDefaultEntryCount);
   }, [resolvedDefaultEntryCount]);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+  
+  useEffect(() => {
+    if (!hasStarted) {
+      clearTimer();
+      return;
+    }
+
+    const hasActiveJob = jobItems.some((item) => item.startedAt && !isTerminalItem(item));
+
+    if (!hasActiveJob) {
+      clearTimer();
+      return;
+    }
+
+    timerRef.current = setInterval(() => {
+      setJobItems((previous) =>
+        previous.map((item) => {
+          if (!item.startedAt || isTerminalItem(item)) {
+            return item;
+          }
+
+          const elapsedSeconds = Math.max(0, Math.floor((Date.now() - item.startedAt) / 1000));
+
+          if (item.elapsedSeconds === elapsedSeconds) {
+            return item;
+          }
+
+          return { ...item, elapsedSeconds };
+        }),
+      );
+    }, 1000);
+
+    return () => {
+      clearTimer();
+    };
+  }, [hasStarted, jobItems, clearTimer]);
 
   const clearSubscriptions = useCallback(() => {
     Object.values(jobSubscriptionsRef.current).forEach((unsubscribe) => {
@@ -91,11 +137,13 @@ export function BulkConsoleForm({
     jobSubscriptionsRef.current = {};
   }, []);
 
+
   useEffect(
     () => () => {
       clearSubscriptions();
+      clearTimer();
     },
-    [clearSubscriptions],
+    [clearSubscriptions, clearTimer],
   );
 
   const updateJobItem = useCallback((entryIndex: number, updates: Partial<BulkJobItem>) => {
@@ -117,13 +165,22 @@ export function BulkConsoleForm({
             return;
           }
 
-          const data = snapshot.data() as { status?: string; message?: string | null; progress?: string | null };
+          const data = snapshot.data() as {
+            status?: string;
+            message?: string | null;
+            progress?: string | null;
+            createdAt?: { seconds?: number; nanoseconds?: number };
+          };
+          const createdAtMs = data?.createdAt ? inferTimestampMs(data.createdAt) : null;
           const status = typeof data.status === "string" ? data.status : null;
           updateJobItem(entryIndex, {
             jobStatus: status,
             progress: typeof data.progress === "string" ? data.progress : null,
             message: data.message ?? null,
             localStatus: "listening",
+            startedAt: createdAtMs ?? undefined,
+            elapsedSeconds:
+              createdAtMs != null ? Math.max(0, Math.floor((Date.now() - createdAtMs) / 1000)) : undefined,
           });
 
           if (status && TERMINAL_JOB_STATUSES.has(status)) {
@@ -188,6 +245,8 @@ export function BulkConsoleForm({
         progress: null,
         message: null,
         localStatus: "queued",
+        startedAt: null,
+        elapsedSeconds: undefined,
       })),
     );
 
@@ -212,6 +271,8 @@ export function BulkConsoleForm({
             jobStatus: "pending",
             localStatus: "listening",
             progress: "準備中...",
+            startedAt: Date.now(),
+            elapsedSeconds: 0,
           });
           subscribeToJob(jobId, index);
         } catch (jobError) {
@@ -289,7 +350,10 @@ export function BulkConsoleForm({
 
       {jobItems.length > 0 ? (
         <div className="space-y-2 rounded-3xl border border-stone-200 bg-white/70 p-4">
-          <p className="text-sm font-semibold text-stone-700">実行状況</p>
+          <div className="flex items-center justify-between text-[11px] text-stone-500">
+            <span className="font-semibold text-stone-700">実行状況</span>
+            <span>{jobItems.filter((item) => isTerminalItem(item)).length}/{jobItems.length}</span>
+          </div>
           <ul className="space-y-1">
             {jobItems.map((item) => (
               <li
@@ -301,7 +365,10 @@ export function BulkConsoleForm({
                   <span className="font-semibold text-stone-900">{item.userLabel}</span>
                   <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
                 </div>
-                {item.progress ? <p className="mt-1 text-[11px] text-stone-600">{item.progress}</p> : null}
+                {item.elapsedSeconds !== undefined ? (
+                  <p className="mt-1 text-[11px] text-stone-600">{formatElapsed(item.elapsedSeconds)}</p>
+                ) : null}
+                {item.progress ? <p className="text-[11px] text-stone-500">{item.progress}</p> : null}
                 {item.message ? <p className="mt-0.5 text-[11px] text-stone-500">{item.message}</p> : null}
               </li>
             ))}
@@ -420,6 +487,46 @@ function parseProgressRatio(text: string | null): number | null {
   }
 
   return Math.min(1, Math.max(0, current / total));
+}
+
+function inferTimestampMs(timestamp: { seconds?: number; nanoseconds?: number }): number | null {
+  if (typeof timestamp?.seconds === "number") {
+    const nanos = typeof timestamp.nanoseconds === "number" ? timestamp.nanoseconds : 0;
+    return timestamp.seconds * 1000 + Math.floor(nanos / 1_000_000);
+  }
+  return null;
+}
+
+function isTerminalItem(item: BulkJobItem): boolean {
+  if (item.localStatus === "error") {
+    return true;
+  }
+
+  if (!item.jobStatus) {
+    return false;
+  }
+
+  return TERMINAL_JOB_STATUSES.has(item.jobStatus);
+}
+
+function formatElapsed(seconds?: number): string {
+  if (typeof seconds !== "number" || seconds < 0) {
+    return "";
+  }
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+
+  if (hours > 0) {
+    return `${hours}時間${minutes}分${secs}秒`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}分${secs}秒`;
+  }
+
+  return `${secs}秒`;
 }
 
 async function triggerJob({

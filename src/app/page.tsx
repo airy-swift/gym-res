@@ -19,6 +19,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
   const pageTitle = group.name ?? "サークル";
+  const groupLabel = pageTitle.trim().slice(0, 1) || null;
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
@@ -30,7 +31,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   }
 
   const representativeHref = `/representative?${query.toString()}`;
-  const bulkHref = `/bulk?${query.toString()}`;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -44,12 +44,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                 className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-4 py-2 text-stone-700 transition hover:border-stone-900/30 hover:text-stone-900"
               >
                 代表ページ
-              </Link>
-              <Link
-                href={bulkHref}
-                className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-stone-700 transition hover:border-stone-400 hover:text-stone-900"
-              >
-                Bulkコンソール
               </Link>
             </div>
           </div>
@@ -69,6 +63,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           groupId={group.id}
           defaultEntryCount={defaultEntryCount}
           representativeEntryCount={representativeCount}
+          jobLabel={groupLabel}
         />
       </section>
     </main>

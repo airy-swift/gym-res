@@ -15,6 +15,7 @@ type StartJobFormProps = {
   credentialInputMode?: "default" | "bulkText";
   bulkCredentialPlaceholder?: string;
   initialBulkCredentialValue?: string;
+  groupFirstCharacter?: string | null;
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
@@ -47,6 +48,7 @@ export function StartJobForm({
   credentialInputMode = "default",
   bulkCredentialPlaceholder,
   initialBulkCredentialValue,
+  groupFirstCharacter,
 }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -152,6 +154,7 @@ export function StartJobForm({
           password,
           entryCount,
           groupId,
+          label: groupFirstCharacter,
         }),
       });
 
