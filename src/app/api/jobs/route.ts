@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
   try {
     await setDoc(doc(db, 'jobs', jobId), {
       status: 'pending',
-      message: 'Job created',
+      message: 'ボブと太郎が今、一生懸命頑張っています。',
       createdAt: serverTimestamp(),
       progress: '準備してます',
       userId,

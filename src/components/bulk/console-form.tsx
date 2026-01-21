@@ -40,6 +40,7 @@ type BulkJobItem = {
 const DEFAULT_PLACEHOLDER = `1行目からいきなりid,passwordの形式で入力してください。下記の感じ↓\n00112233,password123\n44556677,password456`;
 const MIN_DELAY_MS = 10_000;
 const MAX_DELAY_MS = 30_000;
+const MAX_WORKFLOW_FETCH_ATTEMPTS = 6;
 const JOB_STATUS_LABELS: Record<string, string> = {
   pending: "待機中",
   running: "実行中",
@@ -77,7 +78,9 @@ export function BulkConsoleForm({
   const [jobItems, setJobItems] = useState<BulkJobItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+  const [workflowUrl, setWorkflowUrl] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const workflowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setEntryCount(resolvedDefaultEntryCount);
@@ -87,6 +90,13 @@ export function BulkConsoleForm({
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+  }, []);
+
+  const clearWorkflowTimeout = useCallback(() => {
+    if (workflowTimeoutRef.current) {
+      clearTimeout(workflowTimeoutRef.current);
+      workflowTimeoutRef.current = null;
     }
   }, []);
   
@@ -142,8 +152,9 @@ export function BulkConsoleForm({
     () => () => {
       clearSubscriptions();
       clearTimer();
+      clearWorkflowTimeout();
     },
-    [clearSubscriptions, clearTimer],
+    [clearSubscriptions, clearTimer, clearWorkflowTimeout],
   );
 
   const updateJobItem = useCallback((entryIndex: number, updates: Partial<BulkJobItem>) => {
@@ -151,6 +162,46 @@ export function BulkConsoleForm({
       previous.map((item, index) => (index === entryIndex ? { ...item, ...updates } : item)),
     );
   }, []);
+
+  const fetchWorkflowLink = useCallback(async () => {
+    try {
+      const response = await fetch("/api/internal/workflow");
+
+      if (response.ok) {
+        const data = (await response.json().catch(() => null)) as {
+          job_url?: string | null;
+          actions_url?: string | null;
+        } | null;
+
+        const url = data?.job_url || data?.actions_url || null;
+
+        if (url) {
+          setWorkflowUrl(url);
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch workflow link", error);
+    }
+    return false;
+  }, []);
+
+  const scheduleWorkflowLinkFetch = useCallback(
+    (delayMs = 1800, attempt = 0) => {
+      if (attempt >= MAX_WORKFLOW_FETCH_ATTEMPTS) {
+        return;
+      }
+      clearWorkflowTimeout();
+      workflowTimeoutRef.current = setTimeout(async () => {
+        const success = await fetchWorkflowLink();
+        workflowTimeoutRef.current = null;
+        if (!success) {
+          scheduleWorkflowLinkFetch(2000, attempt + 1);
+        }
+      }, delayMs);
+    },
+    [clearWorkflowTimeout, fetchWorkflowLink],
+  );
 
   const subscribeToJob = useCallback(
     (jobId: string, entryIndex: number) => {
@@ -237,6 +288,7 @@ export function BulkConsoleForm({
     }));
 
     setHasStarted(true);
+    setWorkflowUrl(null);
     setJobItems(
       normalizedEntries.map((entry, index) => ({
         entryIndex: index,
@@ -275,6 +327,10 @@ export function BulkConsoleForm({
             elapsedSeconds: 0,
           });
           subscribeToJob(jobId, index);
+
+          if (!workflowUrl) {
+            scheduleWorkflowLinkFetch();
+          }
         } catch (jobError) {
           console.error("Failed to trigger bulk job", jobError);
           const message =
@@ -365,9 +421,6 @@ export function BulkConsoleForm({
                   <span className="font-semibold text-stone-900">{item.userLabel}</span>
                   <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
                 </div>
-                {item.elapsedSeconds !== undefined ? (
-                  <p className="mt-1 text-[11px] text-stone-600">{formatElapsed(item.elapsedSeconds)}</p>
-                ) : null}
                 {item.progress ? <p className="text-[11px] text-stone-500">{item.progress}</p> : null}
                 {item.message ? <p className="mt-0.5 text-[11px] text-stone-500">{item.message}</p> : null}
               </li>
@@ -380,6 +433,10 @@ export function BulkConsoleForm({
 }
 
 function renderJobStatusLabel(item: BulkJobItem): string {
+  if (!isTerminalItem(item) && typeof item.elapsedSeconds === "number" && item.elapsedSeconds >= 0) {
+    return formatElapsed(item.elapsedSeconds);
+  }
+
   if (item.jobStatus) {
     return JOB_STATUS_LABELS[item.jobStatus] ?? item.jobStatus;
   }
