@@ -418,7 +418,19 @@ export function BulkConsoleForm({
                 style={resolveJobBackgroundStyle(item)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-stone-900">{item.userLabel}</span>
+                  <span className="font-semibold text-stone-900">{item.userLabel} {workflowUrl ? (
+                  <a
+                    href={workflowUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-0.5 inline-flex text-[11px] text-sky-600 font-normal underline"
+                  >
+                    進行状況
+                  </a>
+                ) : (
+                  <p className="mt-0.5 text-[11px] text-stone-400">GitHub Actions (取得中...)</p>
+                )}
+                </span>
                   <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
                 </div>
                 {item.progress ? <p className="text-[11px] text-stone-500">{item.progress}</p> : null}
