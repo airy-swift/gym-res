@@ -6,6 +6,11 @@ on:
       jobId:
         description: 'Existing job ID to process'
         required: true
+      title:
+        required: true
+
+run-name: ${{ inputs.title }}
+
 
 jobs:
   process-job:
