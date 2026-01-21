@@ -12,6 +12,9 @@ type StartJobFormProps = {
   className?: string;
   defaultEntryCount?: number;
   representativeEntryCount?: number;
+  credentialInputMode?: "default" | "bulkText";
+  bulkCredentialPlaceholder?: string;
+  initialBulkCredentialValue?: string;
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
@@ -41,9 +44,15 @@ export function StartJobForm({
   className,
   defaultEntryCount,
   representativeEntryCount,
+  credentialInputMode = "default",
+  bulkCredentialPlaceholder,
+  initialBulkCredentialValue,
 }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
+  const [bulkCredentialText, setBulkCredentialText] = useState(() =>
+    credentialInputMode === "bulkText" ? initialBulkCredentialValue ?? "" : "",
+  );
   const [entryCount, setEntryCount] = useState(() => {
     const dateBasedDefault = selectDateBasedEntryCount(entryOptions);
     return resolveDefaultEntryCount(entryOptions, dateBasedDefault ?? defaultEntryCount);
@@ -69,6 +78,24 @@ export function StartJobForm({
 
   const firestore = useMemo(() => getFirestoreDb(), []);
 
+  useEffect(() => {
+    if (credentialInputMode !== "bulkText") {
+      return;
+    }
+
+    setBulkCredentialText(initialBulkCredentialValue ?? "");
+  }, [credentialInputMode, initialBulkCredentialValue]);
+
+  useEffect(() => {
+    if (credentialInputMode !== "bulkText") {
+      return;
+    }
+
+    const { userId: parsedUserId, password: parsedPassword } = parseBulkCredentialText(bulkCredentialText);
+    setLoginId(parsedUserId);
+    setPassword(parsedPassword);
+  }, [bulkCredentialText, credentialInputMode]);
+
   const formClassName = useMemo(() => {
     return ["space-y-6", className].filter(Boolean).join(" ").trim();
   }, [className]);
@@ -87,6 +114,14 @@ export function StartJobForm({
       setIsError(true);
       setFeedback(SUBMISSION_WINDOW_MESSAGE);
       showToast(SUBMISSION_WINDOW_MESSAGE);
+      return;
+    }
+
+    if (credentialInputMode === "bulkText" && (!loginId || !password)) {
+      const missingCredentialMessage = "1行目にID、2行目にパスワードを入力してください";
+      setIsError(true);
+      setFeedback(missingCredentialMessage);
+      showToast(missingCredentialMessage);
       return;
     }
 
@@ -265,6 +300,11 @@ export function StartJobForm({
   }
 
   useEffect(() => {
+    if (credentialInputMode === "bulkText") {
+      setIsInitialized(true);
+      return;
+    }
+
     const savedLoginId = readCookie("startJobLoginId");
     const savedPassword = readCookie("startJobPassword");
 
@@ -277,7 +317,7 @@ export function StartJobForm({
     }
 
     setIsInitialized(true);
-  }, [entryOptions]);
+  }, [credentialInputMode, entryOptions]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -297,20 +337,20 @@ export function StartJobForm({
   }, []);
 
   useEffect(() => {
-    if (!isInitialized) {
+    if (!isInitialized || credentialInputMode === "bulkText") {
       return;
     }
 
     writeCookie("startJobLoginId", loginId);
-  }, [isInitialized, loginId]);
+  }, [credentialInputMode, isInitialized, loginId]);
 
   useEffect(() => {
-    if (!isInitialized) {
+    if (!isInitialized || credentialInputMode === "bulkText") {
       return;
     }
 
     writeCookie("startJobPassword", password);
-  }, [isInitialized, password]);
+  }, [credentialInputMode, isInitialized, password]);
 
   useEffect(() => {
     if (!isInitialized) {
@@ -592,47 +632,71 @@ export function StartJobForm({
     <>
       {shouldShowForm ? (
         <form className={formClassName} onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <label htmlFor="loginId" className="text-sm font-medium text-stone-600">
-              ID
-            </label>
-            <input
-              id="loginId"
-              name="loginId"
-              type="text"
-              placeholder="札幌公共施設予約システムのログインID"
-              value={loginId}
-              onChange={(event) => setLoginId(event.target.value)}
-              className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium text-stone-600">
-              パスワード
-            </label>
-            <div className="relative">
-              <input
-                id="password"
-                name="password"
-                type={isPasswordVisible ? "text" : "password"}
-                placeholder="********"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 pr-16 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
-                required
+          {credentialInputMode === "bulkText" ? (
+            <div className="space-y-2">
+              <label htmlFor="bulkCredentials" className="text-sm font-medium text-stone-600">
+                ID / パスワードメモ
+              </label>
+              <textarea
+                id="bulkCredentials"
+                name="bulkCredentials"
+                value={bulkCredentialText}
+                onChange={(event) => setBulkCredentialText(event.target.value)}
+                placeholder={
+                  bulkCredentialPlaceholder ??
+                  `1行目: ログインID\n2行目: パスワード\n複数ある場合は行を増やし、上から順に実行予定`
+                }
+                className="min-h-[200px] w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
               />
-              <button
-                type="button"
-                onClick={() => setIsPasswordVisible((prev) => !prev)}
-                aria-pressed={isPasswordVisible}
-                className="absolute inset-y-0 right-3 my-auto text-xs font-semibold text-stone-500 transition hover:text-stone-700"
-              >
-                {isPasswordVisible ? "隠す" : "表示"}
-              </button>
+              <p className="text-xs text-stone-500">
+                1行目をID、2行目をパスワードとして扱います。同じ行に「ID パスワード」と書いても認識されます。
+              </p>
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="loginId" className="text-sm font-medium text-stone-600">
+                  ID
+                </label>
+                <input
+                  id="loginId"
+                  name="loginId"
+                  type="text"
+                  placeholder="札幌公共施設予約システムのログインID"
+                  value={loginId}
+                  onChange={(event) => setLoginId(event.target.value)}
+                  className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label htmlFor="password" className="text-sm font-medium text-stone-600">
+                  パスワード
+                </label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={isPasswordVisible ? "text" : "password"}
+                    placeholder="********"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="w-full rounded-xl border border-stone-200 bg-white px-4 py-3 pr-16 text-sm text-stone-900 outline-none transition focus:border-stone-500 focus:bg-white"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsPasswordVisible((prev) => !prev)}
+                    aria-pressed={isPasswordVisible}
+                    className="absolute inset-y-0 right-3 my-auto text-xs font-semibold text-stone-500 transition hover:text-stone-700"
+                  >
+                    {isPasswordVisible ? "隠す" : "表示"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="space-y-2">
             <label htmlFor="entryCount" className="text-sm font-medium text-stone-600">
@@ -857,6 +921,36 @@ function doesImageExist(url: string): Promise<boolean> {
     image.onerror = () => resolve(false);
     image.src = url;
   });
+}
+
+function parseBulkCredentialText(raw: string | undefined | null): { userId: string; password: string } {
+  if (!raw) {
+    return { userId: "", password: "" };
+  }
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length === 0) {
+    return { userId: "", password: "" };
+  }
+
+  const firstLine = lines[0] ?? "";
+  const secondLine = lines[1] ?? "";
+
+  if (secondLine) {
+    return { userId: firstLine, password: secondLine };
+  }
+
+  const tokens = firstLine.split(/[\s,]+/).filter((token) => token.length > 0);
+
+  if (tokens.length >= 2) {
+    return { userId: tokens[0] ?? "", password: tokens[1] ?? "" };
+  }
+
+  return { userId: firstLine, password: "" };
 }
 
 function formatEntryOptionLabel(value: number, representativeCount: number): string {

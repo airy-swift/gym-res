@@ -9,7 +9,7 @@ import { markJobAsFailed } from '@/lib/api/internal-jobs';
 export async function POST(request: NextRequest) {
   const db = getFirestoreDb();
   const jobId = randomUUID().replace(/-/g, '');
-  let body: { userId?: string; password?: string; entryCount?: number; groupId?: string };
+  let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
 
   try {
     body = await request.json();
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { userId, password, entryCount, groupId } = body;
+  const { userId, password, entryCount, groupId, label } = body;
 
   if (!userId || !password || entryCount === undefined || !groupId) {
     return NextResponse.json({ error: 'Missing userId, password, entryCount, or groupId' }, { status: 400 });
@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       password,
       entryCount,
       groupId,
+      label: typeof label === 'string' ? label : null,
     });
 
     try {

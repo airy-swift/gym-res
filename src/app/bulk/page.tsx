@@ -1,27 +1,28 @@
 import Link from "next/link";
 
-import { StartJobForm } from "@/components/start-job-form";
+import { BulkConsoleForm } from "@/components/bulk/console-form";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
-const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
+const entryCountOptions = Array.from({ length: 20 }, (_, index) => index + 1);
 
-type HomePageSearchParams = {
+type BulkPageSearchParams = {
   gp?: string;
   wl?: string;
 };
 
-type HomePageProps = {
-  searchParams?: Promise<HomePageSearchParams> | HomePageSearchParams;
+type BulkPageProps = {
+  searchParams?: Promise<BulkPageSearchParams> | BulkPageSearchParams;
 };
 
-export default async function HomePage({ searchParams }: HomePageProps) {
+export default async function BulkPage({ searchParams }: BulkPageProps) {
   const resolvedSearchParams = await searchParams;
 
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
   const pageTitle = group.name ?? "サークル";
+  const groupLabel = pageTitle.trim().slice(0, 1) || undefined;
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
-  const maxEntryOption = numbers[numbers.length - 1] ?? 1;
-  const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
+  const maxEntryOption = entryCountOptions[entryCountOptions.length - 1] ?? 1;
+  const defaultEntryCount = Math.max(1, Math.min(representativeCount || 1, maxEntryOption));
   const representativeId = resolvedSearchParams?.wl ?? null;
   const query = new URLSearchParams({ gp: group.id });
 
@@ -29,8 +30,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     query.set("wl", representativeId);
   }
 
+  const homeHref = `/?${query.toString()}`;
   const representativeHref = `/representative?${query.toString()}`;
-  const bulkHref = `/bulk?${query.toString()}`;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -40,16 +41,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Gym Reserver</p>
             <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
               <Link
-                href={representativeHref}
+                href={homeHref}
                 className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-4 py-2 text-stone-700 transition hover:border-stone-900/30 hover:text-stone-900"
               >
-                代表ページ
+                トップページへ
               </Link>
               <Link
-                href={bulkHref}
+                href={representativeHref}
                 className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-4 py-2 text-stone-700 transition hover:border-stone-400 hover:text-stone-900"
               >
-                Bulkコンソール
+                代表ページ
               </Link>
             </div>
           </div>
@@ -64,12 +65,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </div>
         </header>
 
-        <StartJobForm
-          entryOptions={numbers}
-          groupId={group.id}
-          defaultEntryCount={defaultEntryCount}
-          representativeEntryCount={representativeCount}
-        />
+        <div className="rounded-3xl border border-stone-200 bg-white/80 p-8 shadow-sm">
+          <BulkConsoleForm
+            groupId={group.id}
+            entryOptions={entryCountOptions}
+            defaultEntryCount={defaultEntryCount}
+            groupLabel={groupLabel}
+          />
+        </div>
       </section>
     </main>
   );

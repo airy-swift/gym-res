@@ -22,7 +22,7 @@ const baseHeaders = {
   Accept: 'application/vnd.github+json',
 };
 
-export async function dispatchJobWorkflow(jobId: string): Promise<void> {
+export async function dispatchJobWorkflow(jobId: string, label?: string): Promise<void> {
   assertWorkflowConfig();
 
   const endpoint = `https://api.github.com/repos/${workflowRepo}/actions/workflows/${workflowFile}/dispatches`;
@@ -31,7 +31,10 @@ export async function dispatchJobWorkflow(jobId: string): Promise<void> {
     headers: baseHeaders,
     body: JSON.stringify({
       ref: workflowRef,
-      inputs: { jobId },
+      inputs: { 
+        jobId,
+        title: `via API ${label ?? '-'}`,
+      },
     }),
   });
 
