@@ -957,10 +957,6 @@ function parseBulkCredentialText(raw: string | undefined | null): { userId: stri
 }
 
 function formatEntryOptionLabel(value: number, representativeCount: number): string {
-  if (value === 16) {
-    return "16 (これ以上は上限突破トライ)";
-  }
-
   if (representativeCount <= 0) {
     return String(value);
   }

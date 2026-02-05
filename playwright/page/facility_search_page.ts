@@ -44,10 +44,6 @@ export async function runFacilitySearchPage(page: Page, roomName: string): Promi
     }
   }
 
-  console.log(bestMatchingRooms);
-  console.log(allMatchingRooms);
-  console.log(roomName);
-
   let rooms: RoomInfo[] = [];
   if (bestMatchingRooms.length > 0) {
     rooms = bestMatchingRooms;
