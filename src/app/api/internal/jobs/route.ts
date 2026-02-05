@@ -38,11 +38,10 @@ export async function POST(request: NextRequest) {
       password,
       entryCount,
       groupId,
-      label: typeof label === 'string' ? label : null,
     });
 
     try {
-      await dispatchJobWorkflow(jobId);
+      await dispatchJobWorkflow(jobId, label);
     } catch (dispatchError) {
       console.error('GitHub Actions dispatch failed', dispatchError);
 

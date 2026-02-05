@@ -41,6 +41,8 @@ const DEFAULT_PLACEHOLDER = `1行目からいきなりid,passwordの形式で入
 const MIN_DELAY_MS = 10_000;
 const MAX_DELAY_MS = 30_000;
 const MAX_WORKFLOW_FETCH_ATTEMPTS = 6;
+const JOB_LISTEN_RETRY_DELAY_MS = 2_000;
+const MAX_JOB_LISTEN_ATTEMPTS = 6;
 const JOB_STATUS_LABELS: Record<string, string> = {
   pending: "待機中",
   running: "実行中",
@@ -69,8 +71,7 @@ export function BulkConsoleForm({
 
   const [csvText, setCsvText] = useState(defaultValue ?? "");
   const resolvedDefaultEntryCount = useMemo(() => {
-    const dateBased = selectDateBasedEntryCount(entryOptions);
-    return sanitizeEntryCount(dateBased ?? defaultEntryCount, entryOptions);
+    return sanitizeEntryCount(defaultEntryCount, entryOptions);
   }, [defaultEntryCount, entryOptions]);
   const normalizedGroupLabel = useMemo(() => deriveGroupLabel(groupLabel), [groupLabel]);
   const [entryCount, setEntryCount] = useState(resolvedDefaultEntryCount);
@@ -204,15 +205,11 @@ export function BulkConsoleForm({
   );
 
   const subscribeToJob = useCallback(
-    (jobId: string, entryIndex: number) => {
+    (jobId: string, entryIndex: number, attempt = 0) => {
       const unsubscribe = onSnapshot(
         doc(firestore, "jobs", jobId),
         (snapshot) => {
           if (!snapshot.exists()) {
-            updateJobItem(entryIndex, {
-              localStatus: "error",
-              message: "ジョブのドキュメントが見つかりません",
-            });
             return;
           }
 
@@ -241,10 +238,19 @@ export function BulkConsoleForm({
         },
         (error) => {
           console.error("Failed to listen to bulk job", error);
-          updateJobItem(entryIndex, {
-            localStatus: "error",
-            message: "進行状況を取得できませんでした",
-          });
+          unsubscribe();
+          delete jobSubscriptionsRef.current[jobId];
+
+          if (attempt < MAX_JOB_LISTEN_ATTEMPTS) {
+            setTimeout(() => {
+              subscribeToJob(jobId, entryIndex, attempt + 1);
+            }, JOB_LISTEN_RETRY_DELAY_MS);
+          } else {
+            updateJobItem(entryIndex, {
+              localStatus: "error",
+              message: "進行状況を取得できませんでした",
+            });
+          }
         },
       );
 
@@ -428,7 +434,7 @@ export function BulkConsoleForm({
                     進行状況
                   </a>
                 ) : (
-                  <p className="mt-0.5 text-[11px] text-stone-400">GitHub Actions (取得中...)</p>
+                  <p className="mt-0.5 text-[11px] text-stone-400">進行状況url取得中...</p>
                 )}
                 </span>
                   <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
@@ -497,17 +503,6 @@ function sanitizeEntryCount(value: number, entryOptions: number[]): number {
     return value;
   }
   return entryOptions[0] ?? 1;
-}
-
-function selectDateBasedEntryCount(entryOptions: number[]): number | undefined {
-  const today = new Date();
-  const preferred = today.getDate() <= 15 ? 10 : 15;
-
-  if (entryOptions.includes(preferred)) {
-    return preferred;
-  }
-
-  return undefined;
 }
 
 function deriveGroupLabel(raw?: string): string | undefined {

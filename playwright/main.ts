@@ -130,7 +130,7 @@ export async function main(): Promise<void> {
 
       try {
         await runSearchPage(page, entry);
-        await runFacilitySearchPage(page);
+        await runFacilitySearchPage(page, entry.room);
         await runFacilityAvailabilityComparisonPage(page, entry);
         await runFacilityAvailabilityPage(page, entry);
         await runLotRequestPage(page, requestStatusEntries);

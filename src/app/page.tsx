@@ -18,8 +18,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const resolvedSearchParams = await searchParams;
 
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
-  const pageTitle = group.name ?? "サークル";
-  const groupLabel = pageTitle.trim().slice(0, 1) || null;
+  const normalizedGroupName = typeof group.name === "string" ? group.name : "";
+  const pageTitle = normalizedGroupName || "サークル";
+  const groupLabel = pageTitle;
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
@@ -63,7 +64,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           groupId={group.id}
           defaultEntryCount={defaultEntryCount}
           representativeEntryCount={representativeCount}
-          jobLabel={groupLabel}
+          groupLabel={groupLabel}
         />
       </section>
     </main>

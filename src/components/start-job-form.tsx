@@ -15,7 +15,7 @@ type StartJobFormProps = {
   credentialInputMode?: "default" | "bulkText";
   bulkCredentialPlaceholder?: string;
   initialBulkCredentialValue?: string;
-  groupFirstCharacter?: string | null;
+  groupLabel?: string | null;
 };
 
 const JOB_CACHE_KEY = "startJobPendingJob";
@@ -48,7 +48,7 @@ export function StartJobForm({
   credentialInputMode = "default",
   bulkCredentialPlaceholder,
   initialBulkCredentialValue,
-  groupFirstCharacter,
+  groupLabel,
 }: StartJobFormProps) {
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
@@ -56,8 +56,7 @@ export function StartJobForm({
     credentialInputMode === "bulkText" ? initialBulkCredentialValue ?? "" : "",
   );
   const [entryCount, setEntryCount] = useState(() => {
-    const dateBasedDefault = selectDateBasedEntryCount(entryOptions);
-    return resolveDefaultEntryCount(entryOptions, dateBasedDefault ?? defaultEntryCount);
+    return resolveDefaultEntryCount(entryOptions, defaultEntryCount);
   });
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -108,6 +107,7 @@ export function StartJobForm({
     }
     return Math.max(0, representativeEntryCount);
   }, [representativeEntryCount]);
+  const normalizedGroupLabel = useMemo(() => deriveGroupLabel(groupLabel), [groupLabel]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -154,7 +154,7 @@ export function StartJobForm({
           password,
           entryCount,
           groupId,
-          label: groupFirstCharacter,
+          label: normalizedGroupLabel,
         }),
       });
 
@@ -976,15 +976,18 @@ function formatEntryOptionLabel(value: number, representativeCount: number): str
   return String(value);
 }
 
-function selectDateBasedEntryCount(entryOptions: number[]): number | undefined {
-  const today = new Date();
-  const preferred = today.getDate() <= 15 ? 10 : 15;
-
-  if (entryOptions.includes(preferred)) {
-    return preferred;
+function deriveGroupLabel(raw?: string | null): string | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
   }
 
-  return undefined;
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return trimmed.slice(0, 1);
 }
 
 function resolveDefaultEntryCount(entryOptions: number[], fallback?: number): number {

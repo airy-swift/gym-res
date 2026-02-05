@@ -11,7 +11,7 @@ type RoomInfo = {
 };
 
 
-export async function runFacilitySearchPage(page: Page): Promise<void> {
+export async function runFacilitySearchPage(page: Page, roomName: string): Promise<void> {
   await page.waitForURL(url => url.toString().startsWith(FACILITY_URL_PREFIX), {
     timeout: 10_000,
   });
@@ -29,21 +29,35 @@ export async function runFacilitySearchPage(page: Page): Promise<void> {
     return;
   }
 
-  const matchingRooms: RoomInfo[] = [];
+  const bestMatchingRooms: RoomInfo[] = [];
+  const allMatchingRooms: RoomInfo[] = [];
   for (let index = 0; index < roomCount; index += 1) {
     const element = roomLocator.nth(index);
     const roomId = await element.getAttribute('id');
-    const roomText = (await element.innerText()).trim();
-    if (roomText.includes(MATCH_SUBSTRING)) {
-      matchingRooms.push({ id: roomId, text: roomText });
+    const roomTexts = (await element.innerText()).trim();
+    const room = roomTexts.split(' ')[0];
+    if (roomTexts.includes(MATCH_SUBSTRING)) {
+      allMatchingRooms.push({ id: roomId, text: room });
+      if (room === `a\n${roomName}`) {
+        bestMatchingRooms.push({ id: roomId, text: room });
+      }
     }
   }
 
-  if (matchingRooms.length === 0) {
+  console.log(bestMatchingRooms);
+  console.log(allMatchingRooms);
+  console.log(roomName);
+
+  let rooms: RoomInfo[] = [];
+  if (bestMatchingRooms.length > 0) {
+    rooms = bestMatchingRooms;
+  } else if (allMatchingRooms.length > 0) {
+    rooms = allMatchingRooms;
+  } else {
     return;
   }
-
-  for (const room of matchingRooms) {
+  
+  for (const room of rooms) {
     if (!room.id) continue;
     const roomElement = page.locator(`#${room.id}`);
     const slots = roomElement.locator(SLOT_SELECTOR);
