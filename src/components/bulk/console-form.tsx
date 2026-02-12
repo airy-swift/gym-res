@@ -470,6 +470,18 @@ export function BulkConsoleForm({
           <ul className="space-y-1">
             {jobItems.map((item) => {
               const formattedMessage = formatJobMessage(item.message);
+              const elapsedClock = formatElapsedClock(item.elapsedSeconds);
+              const workflowElement = resolveWorkflowElement(item);
+              const workflowInfo =
+                workflowElement || elapsedClock ? (
+                  <span className="ml-2 inline-flex items-center gap-2 text-[11px] font-normal">
+                    {workflowElement}
+                    {elapsedClock ? <span className="text-stone-500">{elapsedClock}</span> : null}
+                  </span>
+                ) : null;
+              const isCompletedStatus = item.jobStatus?.toLowerCase() === "completed";
+              const statusLabelText = isCompletedStatus ? null : renderJobStatusLabel(item);
+
               return (
                 <li
                   key={item.jobId ?? `${item.entryIndex}-${item.userLabel}`}
@@ -481,23 +493,14 @@ export function BulkConsoleForm({
                       {renderStatusIcon(item)}
                       <span className="font-semibold text-stone-900">
                         {item.userLabel}
-                        {item.workflowUrl ? (
-                          <a
-                            href={item.workflowUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="ml-2 inline-flex text-[11px] font-normal text-sky-600 underline"
-                          >
-                            進行状況
-                          </a>
-                        ) : item.workflowLinkState === "pending" ? (
-                          <span className="ml-2 text-[11px] font-normal text-stone-400">進行状況URL取得中...</span>
-                        ) : item.workflowLinkState === "error" ? (
-                          <span className="ml-2 text-[11px] font-normal text-red-500">進行状況URLを取得できませんでした</span>
-                        ) : null}
+                        {workflowInfo}
                       </span>
                     </div>
-                    <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
+                    {statusLabelText ? (
+                      <span className="text-[11px] text-stone-500">{statusLabelText}</span>
+                    ) : (
+                      <span aria-hidden="true" />
+                    )}
                   </div>
                   {formattedMessage ? (
                     <p className="mt-0.5 whitespace-pre-line text-[11px] text-stone-500">{formattedMessage}</p>
@@ -625,6 +628,26 @@ function formatJobMessage(message: string | null | undefined): string | null {
   }
   const normalized = message.replace(/<br\s*\/?\>/gi, "\n");
   return normalized.replace(/\n{2,}/g, "\n");
+}
+
+function resolveWorkflowElement(item: BulkJobItem): JSX.Element | null {
+  if (item.workflowUrl) {
+    return (
+      <a href={item.workflowUrl} target="_blank" rel="noreferrer" className="text-sky-600 underline">
+        進行状況
+      </a>
+    );
+  }
+
+  if (item.workflowLinkState === "pending") {
+    return <span className="text-stone-400">進行状況URL取得中...</span>;
+  }
+
+  if (item.workflowLinkState === "error") {
+    return <span className="text-red-500">進行状況URLを取得できませんでした</span>;
+  }
+
+  return null;
 }
 
 type StatusVisualVariant = "idle" | "pending" | "running" | "success" | "error";
@@ -818,6 +841,20 @@ function formatElapsed(seconds?: number): string {
   }
 
   return `${secs}秒`;
+}
+
+function formatElapsedClock(seconds?: number | null): string | null {
+  if (typeof seconds !== "number" || seconds < 0) {
+    return null;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  const paddedMinutes = minutes.toString().padStart(2, "0");
+  const paddedSeconds = secs.toString().padStart(2, "0");
+
+  return `${paddedMinutes}:${paddedSeconds}`;
 }
 
 async function triggerJob({
