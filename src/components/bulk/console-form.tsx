@@ -1,6 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FormEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
 import { getFirestoreDb } from "@/lib/firebase";
@@ -630,7 +640,7 @@ function formatJobMessage(message: string | null | undefined): string | null {
   return normalized.replace(/\n{2,}/g, "\n");
 }
 
-function resolveWorkflowElement(item: BulkJobItem): JSX.Element | null {
+function resolveWorkflowElement(item: BulkJobItem): ReactNode {
   if (item.workflowUrl) {
     return (
       <a href={item.workflowUrl} target="_blank" rel="noreferrer" className="text-sky-600 underline">
@@ -656,7 +666,7 @@ type StatusIconConfig = {
   label: string;
   containerClass: string;
   iconClass: string;
-  Icon: (props: IconProps) => JSX.Element;
+  Icon: (props: IconProps) => ReactElement;
 };
 
 const STATUS_ICON_CONFIG: Record<StatusVisualVariant, StatusIconConfig> = {
@@ -692,7 +702,7 @@ const STATUS_ICON_CONFIG: Record<StatusVisualVariant, StatusIconConfig> = {
   },
 };
 
-function renderStatusIcon(item: BulkJobItem): JSX.Element {
+function renderStatusIcon(item: BulkJobItem): ReactElement {
   const variant = resolveStatusVariant(item);
   const config = STATUS_ICON_CONFIG[variant];
   const IconComponent = config.Icon;
