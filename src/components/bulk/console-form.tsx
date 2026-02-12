@@ -24,6 +24,7 @@ type ParseResult = {
 };
 
 type BulkJobLocalStatus = "queued" | "dispatching" | "listening" | "error";
+type WorkflowLinkState = "idle" | "pending" | "resolved" | "error";
 
 type BulkJobItem = {
   entryIndex: number;
@@ -35,14 +36,17 @@ type BulkJobItem = {
   localStatus: BulkJobLocalStatus;
   startedAt?: number | null;
   elapsedSeconds?: number;
+  workflowUrl?: string | null;
+  workflowLinkState?: WorkflowLinkState;
 };
 
 const DEFAULT_PLACEHOLDER = `1行目からいきなりid,passwordの形式で入力してください。下記の感じ↓\n00112233,password123\n44556677,password456`;
-const MIN_DELAY_MS = 10_000;
-const MAX_DELAY_MS = 30_000;
-const MAX_WORKFLOW_FETCH_ATTEMPTS = 6;
-const JOB_LISTEN_RETRY_DELAY_MS = 2_000;
-const MAX_JOB_LISTEN_ATTEMPTS = 6;
+const JOB_TRIGGER_INTERVAL_MS = 10_000;
+const WORKFLOW_FETCH_INITIAL_DELAY_MS = 1_800;
+const WORKFLOW_FETCH_MAX_DELAY_MS = 10_000;
+const JOB_LISTEN_INITIAL_DELAY_MS = 2_000;
+const JOB_LISTEN_BACKOFF_FACTOR = 1.75;
+const JOB_LISTEN_MAX_BACKOFF_MS = 20_000;
 const JOB_STATUS_LABELS: Record<string, string> = {
   pending: "待機中",
   running: "実行中",
@@ -58,6 +62,7 @@ const LOCAL_STATUS_LABELS: Record<BulkJobLocalStatus, string> = {
   error: "エラー",
 };
 const TERMINAL_JOB_STATUSES = new Set(["completed", "failed", "canceled", "cancelled", "error", "aborted"]);
+const NEGATIVE_TERMINAL_JOB_STATUSES = new Set(["failed", "canceled", "cancelled", "error", "aborted"]);
 
 export function BulkConsoleForm({
   groupId,
@@ -68,6 +73,7 @@ export function BulkConsoleForm({
 }: BulkConsoleFormProps) {
   const firestore = useMemo(() => getFirestoreDb(), []);
   const jobSubscriptionsRef = useRef<Record<string, () => void>>({});
+  const jobRetryTimeoutsRef = useRef<Record<string, NodeJS.Timeout | null>>({});
 
   const [csvText, setCsvText] = useState(defaultValue ?? "");
   const resolvedDefaultEntryCount = useMemo(() => {
@@ -79,9 +85,8 @@ export function BulkConsoleForm({
   const [jobItems, setJobItems] = useState<BulkJobItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  const [workflowUrl, setWorkflowUrl] = useState<string | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const workflowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const workflowTimeoutsRef = useRef<Record<number, NodeJS.Timeout | null>>({});
 
   useEffect(() => {
     setEntryCount(resolvedDefaultEntryCount);
@@ -94,12 +99,34 @@ export function BulkConsoleForm({
     }
   }, []);
 
-  const clearWorkflowTimeout = useCallback(() => {
-    if (workflowTimeoutRef.current) {
-      clearTimeout(workflowTimeoutRef.current);
-      workflowTimeoutRef.current = null;
+  const clearWorkflowLinkTimeout = useCallback((entryIndex: number) => {
+    const timeoutId = workflowTimeoutsRef.current[entryIndex];
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
+    delete workflowTimeoutsRef.current[entryIndex];
   }, []);
+
+  const clearAllWorkflowLinkTimeouts = useCallback(() => {
+    Object.keys(workflowTimeoutsRef.current).forEach((key) => {
+      clearWorkflowLinkTimeout(Number(key));
+    });
+    workflowTimeoutsRef.current = {};
+  }, [clearWorkflowLinkTimeout]);
+
+  const clearJobRetryTimeout = useCallback((jobId: string) => {
+    const timeoutId = jobRetryTimeoutsRef.current[jobId];
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    delete jobRetryTimeoutsRef.current[jobId];
+  }, []);
+
+  const clearAllJobRetryTimeouts = useCallback(() => {
+    Object.keys(jobRetryTimeoutsRef.current).forEach((jobId) => {
+      clearJobRetryTimeout(jobId);
+    });
+  }, [clearJobRetryTimeout]);
   
   useEffect(() => {
     if (!hasStarted) {
@@ -138,24 +165,28 @@ export function BulkConsoleForm({
   }, [hasStarted, jobItems, clearTimer]);
 
   const clearSubscriptions = useCallback(() => {
-    Object.values(jobSubscriptionsRef.current).forEach((unsubscribe) => {
+    Object.entries(jobSubscriptionsRef.current).forEach(([jobId, unsubscribe]) => {
       try {
         unsubscribe();
       } catch (error) {
         console.error("Failed to cleanup job subscription", error);
+      } finally {
+        clearJobRetryTimeout(jobId);
       }
     });
     jobSubscriptionsRef.current = {};
-  }, []);
+    clearAllJobRetryTimeouts();
+    jobRetryTimeoutsRef.current = {};
+  }, [clearAllJobRetryTimeouts, clearJobRetryTimeout]);
 
 
   useEffect(
     () => () => {
       clearSubscriptions();
       clearTimer();
-      clearWorkflowTimeout();
+      clearAllWorkflowLinkTimeouts();
     },
-    [clearSubscriptions, clearTimer, clearWorkflowTimeout],
+    [clearSubscriptions, clearTimer, clearAllWorkflowLinkTimeouts],
   );
 
   const updateJobItem = useCallback((entryIndex: number, updates: Partial<BulkJobItem>) => {
@@ -164,7 +195,7 @@ export function BulkConsoleForm({
     );
   }, []);
 
-  const fetchWorkflowLink = useCallback(async () => {
+  const fetchWorkflowLink = useCallback(async (): Promise<string | null> => {
     try {
       const response = await fetch("/api/internal/workflow");
 
@@ -174,38 +205,42 @@ export function BulkConsoleForm({
           actions_url?: string | null;
         } | null;
 
-        const url = data?.job_url || data?.actions_url || null;
-
-        if (url) {
-          setWorkflowUrl(url);
-          return true;
-        }
+        return data?.job_url || data?.actions_url || null;
       }
     } catch (error) {
       console.error("Failed to fetch workflow link", error);
     }
-    return false;
+    return null;
   }, []);
 
   const scheduleWorkflowLinkFetch = useCallback(
-    (delayMs = 1800, attempt = 0) => {
-      if (attempt >= MAX_WORKFLOW_FETCH_ATTEMPTS) {
-        return;
-      }
-      clearWorkflowTimeout();
-      workflowTimeoutRef.current = setTimeout(async () => {
-        const success = await fetchWorkflowLink();
-        workflowTimeoutRef.current = null;
-        if (!success) {
-          scheduleWorkflowLinkFetch(2000, attempt + 1);
+    (entryIndex: number, delayMs = WORKFLOW_FETCH_INITIAL_DELAY_MS) => {
+      clearWorkflowLinkTimeout(entryIndex);
+      workflowTimeoutsRef.current[entryIndex] = setTimeout(async () => {
+        const url = await fetchWorkflowLink();
+        delete workflowTimeoutsRef.current[entryIndex];
+        if (url) {
+          updateJobItem(entryIndex, {
+            workflowUrl: url,
+            workflowLinkState: "resolved",
+          });
+          return;
         }
+
+        const nextDelay = Math.min(
+          Math.max(WORKFLOW_FETCH_INITIAL_DELAY_MS, Math.floor(delayMs * 1.5)),
+          WORKFLOW_FETCH_MAX_DELAY_MS,
+        );
+        scheduleWorkflowLinkFetch(entryIndex, nextDelay);
       }, delayMs);
     },
-    [clearWorkflowTimeout, fetchWorkflowLink],
+    [clearWorkflowLinkTimeout, fetchWorkflowLink, updateJobItem],
   );
 
   const subscribeToJob = useCallback(
-    (jobId: string, entryIndex: number, attempt = 0) => {
+    (jobId: string, entryIndex: number, retryDelayMs = JOB_LISTEN_INITIAL_DELAY_MS) => {
+      clearJobRetryTimeout(jobId);
+
       const unsubscribe = onSnapshot(
         doc(firestore, "jobs", jobId),
         (snapshot) => {
@@ -232,40 +267,55 @@ export function BulkConsoleForm({
           });
 
           if (status && TERMINAL_JOB_STATUSES.has(status)) {
-            unsubscribe();
+            try {
+              unsubscribe();
+            } catch (cleanupError) {
+              console.error(`Failed to cleanup job subscription after completion (${jobId})`, cleanupError);
+            }
             delete jobSubscriptionsRef.current[jobId];
+            clearJobRetryTimeout(jobId);
           }
         },
         (error) => {
-          console.error("Failed to listen to bulk job", error);
-          unsubscribe();
+          console.error(`Failed to listen to bulk job ${jobId}`, error);
+          try {
+            unsubscribe();
+          } catch (cleanupError) {
+            console.error(`Failed to cleanup broken job listener (${jobId})`, cleanupError);
+          }
           delete jobSubscriptionsRef.current[jobId];
 
-          if (attempt < MAX_JOB_LISTEN_ATTEMPTS) {
-            setTimeout(() => {
-              subscribeToJob(jobId, entryIndex, attempt + 1);
-            }, JOB_LISTEN_RETRY_DELAY_MS);
-          } else {
-            updateJobItem(entryIndex, {
-              localStatus: "error",
-              message: "進行状況を取得できませんでした",
-            });
-          }
+          const nextDelay = Math.min(
+            Math.max(
+              JOB_LISTEN_INITIAL_DELAY_MS,
+              Math.floor(retryDelayMs * JOB_LISTEN_BACKOFF_FACTOR),
+            ),
+            JOB_LISTEN_MAX_BACKOFF_MS,
+          );
+
+          clearJobRetryTimeout(jobId);
+          jobRetryTimeoutsRef.current[jobId] = setTimeout(() => {
+            delete jobRetryTimeoutsRef.current[jobId];
+            subscribeToJob(jobId, entryIndex, nextDelay);
+          }, nextDelay);
         },
       );
 
       jobSubscriptionsRef.current[jobId] = unsubscribe;
     },
-    [firestore, updateJobItem],
+    [clearJobRetryTimeout, firestore, updateJobItem],
   );
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setGlobalError(null);
-    clearSubscriptions();
+
     if (hasStarted) {
       return;
     }
+
+    clearSubscriptions();
+    clearAllWorkflowLinkTimeouts();
     setJobItems([]);
 
     const parsed = parseCsv(csvText);
@@ -294,7 +344,6 @@ export function BulkConsoleForm({
     }));
 
     setHasStarted(true);
-    setWorkflowUrl(null);
     setJobItems(
       normalizedEntries.map((entry, index) => ({
         entryIndex: index,
@@ -305,6 +354,8 @@ export function BulkConsoleForm({
         localStatus: "queued",
         startedAt: null,
         elapsedSeconds: undefined,
+        workflowUrl: null,
+        workflowLinkState: "idle",
       })),
     );
 
@@ -331,12 +382,11 @@ export function BulkConsoleForm({
             progress: "準備中...",
             startedAt: Date.now(),
             elapsedSeconds: 0,
+            workflowUrl: null,
+            workflowLinkState: "pending",
           });
           subscribeToJob(jobId, index);
-
-          if (!workflowUrl) {
-            scheduleWorkflowLinkFetch();
-          }
+          scheduleWorkflowLinkFetch(index);
         } catch (jobError) {
           console.error("Failed to trigger bulk job", jobError);
           const message =
@@ -344,13 +394,14 @@ export function BulkConsoleForm({
           updateJobItem(index, {
             localStatus: "error",
             message,
+            workflowLinkState: "error",
+            workflowUrl: null,
           });
           continue;
         }
 
         if (index < normalizedEntries.length - 1) {
-          const delayMs = randomDelayMs(MIN_DELAY_MS, MAX_DELAY_MS);
-          await wait(delayMs);
+          await wait(JOB_TRIGGER_INTERVAL_MS);
         }
       }
     } finally {
@@ -417,32 +468,43 @@ export function BulkConsoleForm({
             <span>{jobItems.filter((item) => isTerminalItem(item)).length}/{jobItems.length}</span>
           </div>
           <ul className="space-y-1">
-            {jobItems.map((item) => (
-              <li
-                key={item.jobId ?? `${item.entryIndex}-${item.userLabel}`}
-                className="rounded-xl border border-stone-100 px-3 py-2 text-xs text-stone-800"
-                style={resolveJobBackgroundStyle(item)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-semibold text-stone-900">{item.userLabel} {workflowUrl ? (
-                  <a
-                    href={workflowUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-0.5 inline-flex text-[11px] text-sky-600 font-normal underline"
-                  >
-                    進行状況
-                  </a>
-                ) : (
-                  <p className="mt-0.5 text-[11px] text-stone-400">進行状況url取得中...</p>
-                )}
-                </span>
-                  <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
-                </div>
-                {item.progress ? <p className="text-[11px] text-stone-500">{item.progress}</p> : null}
-                {item.message ? <p className="mt-0.5 text-[11px] text-stone-500">{item.message}</p> : null}
-              </li>
-            ))}
+            {jobItems.map((item) => {
+              const formattedMessage = formatJobMessage(item.message);
+              return (
+                <li
+                  key={item.jobId ?? `${item.entryIndex}-${item.userLabel}`}
+                  className="rounded-xl border border-stone-100 px-3 py-2 text-xs text-stone-800"
+                  style={resolveJobBackgroundStyle(item)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {renderStatusIcon(item)}
+                      <span className="font-semibold text-stone-900">
+                        {item.userLabel}
+                        {item.workflowUrl ? (
+                          <a
+                            href={item.workflowUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ml-2 inline-flex text-[11px] font-normal text-sky-600 underline"
+                          >
+                            進行状況
+                          </a>
+                        ) : item.workflowLinkState === "pending" ? (
+                          <span className="ml-2 text-[11px] font-normal text-stone-400">進行状況URL取得中...</span>
+                        ) : item.workflowLinkState === "error" ? (
+                          <span className="ml-2 text-[11px] font-normal text-red-500">進行状況URLを取得できませんでした</span>
+                        ) : null}
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-stone-500">{renderJobStatusLabel(item)}</span>
+                  </div>
+                  {formattedMessage ? (
+                    <p className="mt-0.5 whitespace-pre-line text-[11px] text-stone-500">{formattedMessage}</p>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
@@ -451,6 +513,10 @@ export function BulkConsoleForm({
 }
 
 function renderJobStatusLabel(item: BulkJobItem): string {
+  if (item.progress) {
+    return item.progress;
+  }
+
   if (!isTerminalItem(item) && typeof item.elapsedSeconds === "number" && item.elapsedSeconds >= 0) {
     return formatElapsed(item.elapsedSeconds);
   }
@@ -553,6 +619,167 @@ function parseProgressRatio(text: string | null): number | null {
   return Math.min(1, Math.max(0, current / total));
 }
 
+function formatJobMessage(message: string | null | undefined): string | null {
+  if (!message) {
+    return null;
+  }
+  const normalized = message.replace(/<br\s*\/?\>/gi, "\n");
+  return normalized.replace(/\n{2,}/g, "\n");
+}
+
+type StatusVisualVariant = "idle" | "pending" | "running" | "success" | "error";
+
+type StatusIconConfig = {
+  label: string;
+  containerClass: string;
+  iconClass: string;
+  Icon: (props: IconProps) => JSX.Element;
+};
+
+const STATUS_ICON_CONFIG: Record<StatusVisualVariant, StatusIconConfig> = {
+  idle: {
+    label: "未実行",
+    containerClass: "bg-stone-100 text-stone-500",
+    iconClass: "h-3 w-3",
+    Icon: DotIcon,
+  },
+  pending: {
+    label: "実行準備中",
+    containerClass: "bg-amber-100 text-amber-600",
+    iconClass: "h-4 w-4",
+    Icon: ClockIcon,
+  },
+  running: {
+    label: "実行中",
+    containerClass: "bg-sky-100 text-sky-600",
+    iconClass: "h-4 w-4 animate-spin",
+    Icon: SpinnerIcon,
+  },
+  success: {
+    label: "完了",
+    containerClass: "bg-emerald-100 text-emerald-600",
+    iconClass: "h-4 w-4",
+    Icon: CheckIcon,
+  },
+  error: {
+    label: "エラー",
+    containerClass: "bg-red-100 text-red-600",
+    iconClass: "h-4 w-4",
+    Icon: AlertIcon,
+  },
+};
+
+function renderStatusIcon(item: BulkJobItem): JSX.Element {
+  const variant = resolveStatusVariant(item);
+  const config = STATUS_ICON_CONFIG[variant];
+  const IconComponent = config.Icon;
+
+  return (
+    <span
+      className={`flex h-7 w-7 items-center justify-center rounded-full ${config.containerClass}`}
+      aria-label={config.label}
+    >
+      <IconComponent className={config.iconClass} />
+    </span>
+  );
+}
+
+function resolveStatusVariant(item: BulkJobItem): StatusVisualVariant {
+  if (item.localStatus === "error") {
+    return "error";
+  }
+
+  const normalizedStatus = typeof item.jobStatus === "string" ? item.jobStatus.toLowerCase() : null;
+
+  if (normalizedStatus === "completed") {
+    return "success";
+  }
+
+  if (normalizedStatus && NEGATIVE_TERMINAL_JOB_STATUSES.has(normalizedStatus)) {
+    return "error";
+  }
+
+  if (normalizedStatus === "running") {
+    return "running";
+  }
+
+  if (normalizedStatus === "pending") {
+    return "pending";
+  }
+
+  if (item.localStatus === "dispatching") {
+    return "pending";
+  }
+
+  if (item.localStatus === "listening") {
+    return "running";
+  }
+
+  return "idle";
+}
+
+type IconProps = { className?: string };
+
+function SpinnerIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path
+        className="opacity-85"
+        d="M12 3a9 9 0 0 1 9 9"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M5 13l4 4L19 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function AlertIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <path
+        d="M12 9v4m0 4h.01M10.29 3.86 2.82 17.01A1.5 1.5 0 0 0 4.13 19.25h15.74a1.5 1.5 0 0 0 1.31-2.24L13.7 3.86a1.5 1.5 0 0 0-2.42 0Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ClockIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v5l3 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DotIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="12" r="5" />
+    </svg>
+  );
+}
+
 function inferTimestampMs(timestamp: { seconds?: number; nanoseconds?: number }): number | null {
   if (typeof timestamp?.seconds === "number") {
     const nanos = typeof timestamp.nanoseconds === "number" ? timestamp.nanoseconds : 0;
@@ -643,13 +870,6 @@ async function triggerJob({
   }
 
   return payload.jobId;
-}
-
-function randomDelayMs(min: number, max: number): number {
-  if (max <= min) {
-    return min;
-  }
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function wait(durationMs: number): Promise<void> {
