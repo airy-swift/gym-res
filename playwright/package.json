@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "play": "tsx main.ts"
+    "play": "tsx main.ts",
+    "hit": "tsx hit.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

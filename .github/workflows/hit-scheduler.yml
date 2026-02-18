@@ -1,0 +1,87 @@
+name: Scheduled Hit Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      group_id:
+        description: 'Run hit only for specified group ID (optional)'
+        required: false
+        type: string
+  schedule:
+    # JST 09:05 on 11th and 23rd = UTC 00:05 on 11th and 23rd
+    - cron: '5 0 11,23 * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-hit-runner
+  cancel-in-progress: false
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.prepare.outputs.matrix }}
+      total: ${{ steps.prepare.outputs.total }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build hit matrix via internal API
+        id: prepare
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          TARGET_GROUP_ID: ${{ github.event.inputs.group_id }}
+        run: |
+          set -euo pipefail
+          test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
+          test -n "$API_TOKEN" || { echo 'API_TOKEN secret is required'; exit 1; }
+
+          if [ -n "${TARGET_GROUP_ID:-}" ]; then
+            RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+              -H "API_TOKEN: $API_TOKEN" \
+              --data-urlencode "groupId=$TARGET_GROUP_ID" \
+              -H 'Accept: application/json')
+          else
+            RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+              -H "API_TOKEN: $API_TOKEN" \
+              -H 'Accept: application/json')
+          fi
+
+          MATRIX_JSON=$(echo "$RESPONSE_JSON" | jq -c '.targets // []')
+          TOTAL=$(echo "$RESPONSE_JSON" | jq -r '.total // 0')
+
+          {
+            echo "matrix<<EOF"
+            echo "$MATRIX_JSON"
+            echo "EOF"
+            echo "total=$TOTAL"
+          } >> "$GITHUB_OUTPUT"
+
+  run-hit-jobs:
+    name: run-hit-${{ matrix.target.groupId }}
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.total != '0'
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        target: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    uses: ./.github/workflows/hit-worker.yml
+    with:
+      group_id: ${{ matrix.target.groupId }}
+      row_index: ${{ matrix.target.rowIndex }}
+    secrets:
+      api_base_url: ${{ secrets.API_BASE_URL }}
+      api_token: ${{ secrets.API_TOKEN }}
+
+  no-target:
+    runs-on: ubuntu-latest
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.total == '0'
+    steps:
+      - name: No target groups
+        run: echo "groups.ids から実行対象が見つからなかったため処理を終了します。"

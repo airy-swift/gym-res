@@ -1,10 +1,22 @@
 import type { Page } from '@playwright/test';
-import { logEarlyReturn } from '../util';
+import { captureScreenshot, logEarlyReturn } from '../util';
 import type { RepresentativeEntry } from '../types';
 
 const REQUEST_STATUS_URL =
   'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+export type RequestStatusFilter = {
+  ja: string;
+  icon: string;
+  needScreenshot: boolean;
+};
+
+export const REQUEST_STATUS_FILTERS: RequestStatusFilter[] = [
+  { ja: '当選', icon: 'lottery', needScreenshot: true },
+  { ja: '抽選待ち', icon: 'lottery_wait', needScreenshot: false },
+  { ja: '当選確定', icon: 'lottery_resolved', needScreenshot: true },
+];
 
 function toDate(source: string | null): Date | null {
   if (!source) return null;
@@ -23,14 +35,23 @@ function formatDateLabel(dateValue: Date | null): string {
   return `${year}年${month}月${day}日(${weekday})`;
 }
 
-export async function ensureRequestStatusPage(page: Page): Promise<RepresentativeEntry[]> {
+export async function ensureRequestStatusPage(
+  page: Page,
+  filter: RequestStatusFilter,
+  screenshotPaths?: string[],
+): Promise<RepresentativeEntry[]> {
   await page.waitForURL(url => url.toString().startsWith(REQUEST_STATUS_URL), {
     timeout: 10_000,
   });
   await page.getByRole('button', { name: /申込状態：\s*すべての状態/ }).click();
-  await page.getByRole('button', { name: '抽選待ち' }).click();
+  await page.getByRole('button', { name: filter.ja, exact: true }).click();
   await new Promise(resolve => setTimeout(resolve, 3_000));
 
+  if (filter.needScreenshot) {
+    const screenshotPath = await captureScreenshot(page, 'request-status-page');
+    screenshotPaths?.push(screenshotPath);
+  }
+  
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
   const lotteryLists = page.locator('div[role="list"].v-list.is-withBorder-marginL.h-radius-s');
   if ((await lotteryLists.count()) === 0) {
@@ -72,7 +93,8 @@ export async function ensureRequestStatusPage(page: Page): Promise<Representativ
     const statusText = (await statusIcon.count())
       ? (await statusIcon.innerText()).trim()
       : '';
-    if (statusText !== 'lottery_wait') {
+
+    if (statusText !== filter.icon) {
       continue;
     }
 

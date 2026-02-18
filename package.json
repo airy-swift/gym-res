@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "play": "tsx playwright/main.ts",
+    "hit": "tsx playwright/hit.ts",
     "play:test": "playwright test --config=playwright/playwright.config.ts",
     "lint": "eslint"
   },

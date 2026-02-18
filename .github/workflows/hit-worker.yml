@@ -1,0 +1,73 @@
+name: Hit Worker
+
+on:
+  workflow_call:
+    inputs:
+      group_id:
+        description: Group document ID
+        required: true
+        type: string
+      row_index:
+        description: Row index in prepared hit target list
+        required: true
+        type: number
+    secrets:
+      api_base_url:
+        required: true
+      api_token:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  run-hit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_GROUP_ID: ${{ inputs.group_id }}
+      API_BASE_URL: ${{ secrets.api_base_url }}
+      API_TOKEN: ${{ secrets.api_token }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: playwright/package-lock.json
+
+      - name: Mask credentials
+        run: echo "::add-mask::$API_TOKEN"
+
+      - name: Resolve credential via internal API
+        run: |
+          set -euo pipefail
+          RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+            -H "API_TOKEN: $API_TOKEN" \
+            --data-urlencode "groupId=${{ inputs.group_id }}" \
+            --data-urlencode "rowIndex=${{ inputs.row_index }}" \
+            -H 'Accept: application/json')
+
+          SERVICE_USER=$(echo "$RESPONSE_JSON" | jq -r '.userId // empty')
+          SERVICE_PASS=$(echo "$RESPONSE_JSON" | jq -r '.password // empty')
+
+          test -n "$SERVICE_USER" || { echo "Missing userId from internal API"; exit 1; }
+          test -n "$SERVICE_PASS" || { echo "Missing password from internal API"; exit 1; }
+
+          echo "::add-mask::$SERVICE_USER"
+          echo "::add-mask::$SERVICE_PASS"
+          echo "SERVICE_USER=$SERVICE_USER" >> "$GITHUB_ENV"
+          echo "SERVICE_PASS=$SERVICE_PASS" >> "$GITHUB_ENV"
+
+      - name: Install Playwright dependencies
+        working-directory: playwright
+        run: |
+          npm ci
+          npx playwright install --with-deps
+
+      - name: Run hit script
+        working-directory: playwright
+        run: xvfb-run -a npm run hit

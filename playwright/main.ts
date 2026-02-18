@@ -9,13 +9,14 @@ import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
 import { LOT_REQUEST_URL, runLotRequestPage } from './page/lot_request_page';
 import { runConfirmationPage } from './page/confirmation_page';
-import { ensureRequestStatusPage } from './page/request_status_page';
+import { ensureRequestStatusPage, REQUEST_STATUS_FILTERS } from './page/request_status_page';
 import { runSearchPage } from './page/search_page';
 import { runFacilitySearchPage } from './page/facility_search_page';
 import { runFacilityAvailabilityPage } from './page/facility_availability';
 import { runFacilityAvailabilityComparisonPage } from './page/facility_availability_comparison';
 import { runSeekLotComparePage } from './page/seek_lot_compare_page';
 import { sendLineNotification } from './util';
+
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
 export const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
@@ -101,7 +102,7 @@ export async function main(): Promise<void> {
 
     // 今のアカウントが既に応募済みの枠
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
-    const requestStatusEntries = await ensureRequestStatusPage(page);
+    const requestStatusEntries = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[0]);
 
     const pendingEntries = representativeEntries.filter(entry => {
       const normalizedEntry = normalizeEntry(entry);

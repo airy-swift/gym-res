@@ -21,6 +21,7 @@ export async function isValidGroupId(groupId: string): Promise<boolean> {
 export type GroupDocumentData = {
   name?: string;
   urls?: string[];
+  ids?: string;
   list?: Array<{
     gymName?: string;
     room?: string;

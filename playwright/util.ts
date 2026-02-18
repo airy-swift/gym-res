@@ -3,12 +3,15 @@ import https from 'node:https';
 
 import type { Job, RepresentativeEntry } from './types';
 
+const SCREENSHOT_QUALITY = 60;
 const screenshotCounters: Record<string, number> = {};
 
-export async function captureScreenshot(page: Page, label: string): Promise<void> {
-  const nextIndex = (screenshotCounters[label] ?? 0) + 1;
-  screenshotCounters[label] = nextIndex;
-  await page.screenshot({ path: `${label}${nextIndex}.png`, fullPage: true });
+export async function captureScreenshot(page: Page, label: string): Promise<string> {
+  const index = screenshotCounters[label] ?? 0;
+  screenshotCounters[label] = index + 1;
+  const path = `${label}${index}.jpg`;
+  await page.screenshot({ path, fullPage: true, type: 'jpeg', quality: SCREENSHOT_QUALITY });
+  return path;
 }
 
 export function logEarlyReturn(message: string): void {
@@ -171,6 +174,58 @@ export async function cleanupJobCredentials(): Promise<void> {
     }
   } catch (error) {
     logEarlyReturn(`Failed to cleanup job credentials: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+type UploadApplicationImageParams = {
+  groupId: string;
+  timestamp: string;
+  fileName: string;
+  imageData: Uint8Array;
+  contentType?: string;
+};
+
+export async function uploadApplicationImage({
+  groupId,
+  timestamp,
+  fileName,
+  imageData,
+  contentType = 'image/jpeg',
+}: UploadApplicationImageParams): Promise<boolean> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping application image upload.');
+    return false;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/groups/applications/image`;
+    const formData = new FormData();
+    formData.set('groupId', groupId);
+    formData.set('timestamp', timestamp);
+    formData.set('fileName', fileName);
+    formData.set('image', new Blob([Buffer.from(imageData)], { type: contentType }), fileName);
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        API_TOKEN: apiToken,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to upload application image (status ${response.status}): ${text}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logEarlyReturn(`Failed to upload application image: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
   }
 }
 
