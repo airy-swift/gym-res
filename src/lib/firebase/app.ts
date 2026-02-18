@@ -6,7 +6,7 @@ const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  storageBucket: normalizeStorageBucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
@@ -41,6 +41,30 @@ let cachedApp: FirebaseApp | undefined;
 let cachedAuth: Auth | undefined;
 let cachedFirestore: Firestore | undefined;
 
+function normalizeStorageBucket(rawValue: string | undefined): string | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (trimmed.startsWith('gs://')) {
+    return trimmed.replace(/^gs:\/\//, '').replace(/\/+$/, '');
+  }
+
+  if (trimmed.startsWith('https://firebasestorage.googleapis.com/')) {
+    const matched = trimmed.match(/\/b\/([^/]+)/);
+    if (matched?.[1]) {
+      return matched[1];
+    }
+  }
+
+  return trimmed.replace(/\/+$/, '');
+}
+
 export const getFirebaseApp = (): FirebaseApp => {
   if (cachedApp) {
     return cachedApp;
@@ -68,4 +92,12 @@ export const getFirestoreDb = (): Firestore => {
 
   cachedFirestore = getFirestore(getFirebaseApp());
   return cachedFirestore;
+};
+
+export const getStorageBucketName = (): string => {
+  const bucket = firebaseConfig.storageBucket;
+  if (!bucket) {
+    throw new Error('Missing NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET');
+  }
+  return bucket;
 };

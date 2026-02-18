@@ -3,7 +3,7 @@ import { arrayUnion, doc, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes } from "firebase/storage";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
-import { getFirebaseApp, getFirestoreDb } from "@/lib/firebase/app";
+import { getFirebaseApp, getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
 
 export const runtime = "nodejs";
 
@@ -43,7 +43,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const imageBuffer = new Uint8Array(await image.arrayBuffer());
-    const storage = getStorage(getFirebaseApp());
+    const storageBucket = getStorageBucketName();
+    const storage = getStorage(getFirebaseApp(), `gs://${storageBucket}`);
     await uploadBytes(ref(storage, storagePath), imageBuffer, {
       contentType: image.type || "image/jpeg",
     });
@@ -58,7 +59,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, storagePath }, { status: 200 });
   } catch (error) {
     console.error("Failed to upload application image", error);
-    return NextResponse.json({ error: "Failed to upload image" }, { status: 500 });
+    const detail = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: "Failed to upload image", detail }, { status: 500 });
   }
 }
 

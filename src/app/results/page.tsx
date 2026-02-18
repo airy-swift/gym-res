@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { collection, getDocs } from "firebase/firestore";
 
-import { getFirestoreDb } from "@/lib/firebase/app";
+import { getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
 type ResultsPageSearchParams = {
@@ -32,7 +32,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const homeHref = `/?${query.toString()}`;
   const imageGroups = await getAllApplicationImageGroups(group.id);
   const totalImageCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.imagePaths.length, 0);
-  const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ?? "";
+  const storageBucket = resolveStorageBucket();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -107,6 +107,14 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
       </section>
     </main>
   );
+}
+
+function resolveStorageBucket(): string {
+  try {
+    return getStorageBucketName();
+  } catch {
+    return "";
+  }
 }
 
 async function getAllApplicationImageGroups(
