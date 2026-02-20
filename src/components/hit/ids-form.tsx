@@ -67,7 +67,7 @@ export function HitIdsForm({ groupId, initialValue }: HitIdsFormProps) {
 
       setTestStatus("success");
       setTestMessage(
-        "テスト実行を開始しました。GitHub Actions の Hit Runner を確認してください。2~3分待ったら下記のリンクを開いてください。",
+        "テスト実行を開始しました。2~3分待ったら下記のリンクを開いてください。",
       );
     } catch (error) {
       console.error("Failed to trigger hit test", error);
