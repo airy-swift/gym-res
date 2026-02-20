@@ -102,7 +102,7 @@ export async function main(): Promise<void> {
 
     // 今のアカウントが既に応募済みの枠
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
-    const requestStatusEntries = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[0]);
+    const requestStatusEntries = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[1]);
 
     const pendingEntries = representativeEntries.filter(entry => {
       const normalizedEntry = normalizeEntry(entry);

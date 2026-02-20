@@ -16,6 +16,7 @@ type ResultsPageProps = {
 type ApplicationImageGroup = {
   timestampMs: number;
   docId: string;
+  hits: string[];
   imagePaths: string[];
 };
 
@@ -32,6 +33,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const homeHref = `/?${query.toString()}`;
   const imageGroups = await getAllApplicationImageGroups(group.id);
   const totalImageCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.imagePaths.length, 0);
+  const totalHitCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.hits.length, 0);
   const storageBucket = resolveStorageBucket();
 
   return (
@@ -50,15 +52,15 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
           <div className="border-l-4 border-stone-400/70 pl-6">
             <h1 className="text-2xl font-semibold text-stone-900">抽選状況確認</h1>
             <p className="mt-2 text-sm text-stone-600">
-              applications配下の画像を日時ごとに表示します。
+              applications配下の抽選結果を日時ごとに表示します。
             </p>
             <p className="mt-1 text-xs text-stone-500">
-              対象: {imageGroups.length}件 / 画像: {totalImageCount}枚
+              対象: {imageGroups.length}件 / 抽選行: {totalHitCount}件 / 画像: {totalImageCount}枚
             </p>
           </div>
         </header>
 
-        {!storageBucket ? (
+        {!storageBucket && totalImageCount > 0 ? (
           <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-sm text-red-700">
             NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET が未設定のため画像URLを生成できません。
           </div>
@@ -77,8 +79,24 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
               >
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
                   <p className="font-semibold text-stone-700">取得日時</p>
-                  <p>{formatTimestamp(groupItem.timestampMs)} / {groupItem.imagePaths.length}枚</p>
+                  <p>
+                    {formatTimestamp(groupItem.timestampMs)}
+                    {" / "}抽選行: {groupItem.hits.length}
+                    {" / "}画像: {groupItem.imagePaths.length}
+                  </p>
                 </div>
+                {groupItem.hits.length > 0 ? (
+                  <div className="mb-4 rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-600">Hits</p>
+                    <ul className="space-y-1 text-xs text-stone-700">
+                      {groupItem.hits.map((line) => (
+                        <li key={`${groupItem.docId}-${line}`} className="font-mono whitespace-pre-wrap">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {groupItem.imagePaths.map((imagePath) => {
                     const imageUrl = buildStorageImageUrl(storageBucket, imagePath);
@@ -131,7 +149,10 @@ async function getAllApplicationImageGroups(
         return null;
       }
 
-      const data = docSnapshot.data() as { images?: unknown } | undefined;
+      const data = docSnapshot.data() as { hits?: unknown; images?: unknown } | undefined;
+      const hits = Array.isArray(data?.hits)
+        ? data.hits.filter((value): value is string => typeof value === "string" && value.length > 0)
+        : [];
       const imagePaths = Array.isArray(data?.images)
         ? data.images.filter((value): value is string => typeof value === "string" && value.length > 0)
         : [];
@@ -139,6 +160,7 @@ async function getAllApplicationImageGroups(
       return {
         docId: docSnapshot.id,
         timestampMs,
+        hits,
         imagePaths,
       } satisfies ApplicationImageGroup;
     })

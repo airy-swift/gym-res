@@ -4,6 +4,7 @@ import { getStorage, ref, uploadBytes } from "firebase/storage";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
 import { getFirebaseApp, getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
+import { hasServiceAccountUploadConfig, uploadToStorageWithServiceAccount } from "@/lib/firebase/storage-server-upload";
 
 export const runtime = "nodejs";
 
@@ -40,14 +41,30 @@ export async function POST(request: NextRequest) {
 
   const safeFileName = sanitizeFileName(rawFileName || image.name || "image.jpg");
   const storagePath = `groups/${groupId}/applications/${timestamp}/${safeFileName}`;
+  const hasServiceAccount = hasServiceAccountUploadConfig();
 
   try {
     const imageBuffer = new Uint8Array(await image.arrayBuffer());
     const storageBucket = getStorageBucketName();
-    const storage = getStorage(getFirebaseApp(), `gs://${storageBucket}`);
-    await uploadBytes(ref(storage, storagePath), imageBuffer, {
-      contentType: image.type || "image/jpeg",
-    });
+    const contentType = image.type || "image/jpeg";
+
+    if (hasServiceAccount) {
+      await uploadToStorageWithServiceAccount({
+        bucket: storageBucket,
+        objectPath: storagePath,
+        body: imageBuffer,
+        contentType,
+      });
+    } else if (process.env.NODE_ENV === "development") {
+      const storage = getStorage(getFirebaseApp(), `gs://${storageBucket}`);
+      await uploadBytes(ref(storage, storagePath), imageBuffer, {
+        contentType,
+      });
+    } else {
+      throw new Error(
+        "Server upload requires FIREBASE_ADMIN_CLIENT_EMAIL and FIREBASE_ADMIN_PRIVATE_KEY in production.",
+      );
+    }
 
     const db = getFirestoreDb();
     await setDoc(
@@ -58,7 +75,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, storagePath }, { status: 200 });
   } catch (error) {
-    console.error("Failed to upload application image", error);
+    console.error("Failed to upload application image", {
+      groupId,
+      timestamp,
+      storagePath,
+      hasServiceAccountUploadConfig: hasServiceAccount,
+      error,
+    });
     const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: "Failed to upload image", detail }, { status: 500 });
   }

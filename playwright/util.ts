@@ -229,6 +229,49 @@ export async function uploadApplicationImage({
   }
 }
 
+type SaveApplicationHitsParams = {
+  groupId: string;
+  timestamp: string;
+  hits: string[];
+};
+
+export async function saveApplicationHits({
+  groupId,
+  timestamp,
+  hits,
+}: SaveApplicationHitsParams): Promise<boolean> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping application hits save.');
+    return false;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/groups/applications/hits`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        API_TOKEN: apiToken,
+      },
+      body: JSON.stringify({ groupId, timestamp, hits }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to save application hits (status ${response.status}): ${text}`);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    logEarlyReturn(`Failed to save application hits: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
 export function deriveUdParam(dateText: string): string | null {
   const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   if (!match) {
