@@ -107,12 +107,12 @@ export async function ensureRequestStatusPage(
       continue;
     }
 
-    const matchesNextMonth =
-      startDate.getFullYear() === targetYear && startDate.getMonth() === targetMonth;
-    if (!matchesNextMonth) {
-      logEarlyReturn('Skipping entry that is not for next month.');
-      continue;
-    }
+    // const matchesNextMonth =
+    //   startDate.getFullYear() === targetYear && startDate.getMonth() === targetMonth;
+    // if (!matchesNextMonth) {
+    //   logEarlyReturn('Skipping entry that is not for next month.');
+    //   continue;
+    // }
 
     const dateLabel = formatDateLabel(startDate);
     const timeLocator = item.locator('span.InputContainer.InputRange.is-time.d-inline-block');

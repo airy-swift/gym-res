@@ -2,6 +2,7 @@ import Link from "next/link";
 import { collection, getDocs } from "firebase/firestore";
 
 import { getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
+import { ResultsImageGallery } from "@/components/results/image-gallery";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
 type ResultsPageSearchParams = {
@@ -20,6 +21,13 @@ type ApplicationImageGroup = {
   imagePaths: string[];
 };
 
+type AggregatedHitRow = {
+  key: string;
+  line: string;
+  sortDateMs: number | null;
+  sourceTimestampMs: number;
+};
+
 export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const resolvedSearchParams = await searchParams;
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
@@ -35,7 +43,8 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const totalImageCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.imagePaths.length, 0);
   const totalHitCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.hits.length, 0);
   const storageBucket = resolveStorageBucket();
-  const groupsWithImages = imageGroups.filter((groupItem) => groupItem.imagePaths.length > 0);
+  const aggregatedHitRows = buildAggregatedHitRows(imageGroups);
+  const resultImageUrls = buildResultImageUrls(imageGroups, storageBucket);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -52,9 +61,6 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
           </div>
           <div className="border-l-4 border-stone-400/70 pl-6">
             <h1 className="text-2xl font-semibold text-stone-900">抽選状況確認</h1>
-            <p className="mt-2 text-sm text-stone-600">
-              applications配下の抽選結果を日時ごとに表示します。
-            </p>
             <p className="mt-1 text-xs text-stone-500">
               対象: {imageGroups.length}件 / 抽選行: {totalHitCount}件 / 画像: {totalImageCount}枚
             </p>
@@ -75,70 +81,28 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
           <div className="space-y-6">
             <section className="rounded-3xl border border-stone-200 bg-white/80 p-6 shadow-sm">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
-                <p className="font-semibold text-stone-700">抽選テキスト</p>
+                <p className="font-semibold text-stone-700">抽選結果</p>
                 <p>合計 {totalHitCount} 行</p>
               </div>
-              <div className="space-y-3">
-                {imageGroups.map((groupItem) => (
-                  <div key={`text-${groupItem.docId}`} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <p className="mb-2 text-xs font-semibold text-stone-700">
-                      {formatTimestamp(groupItem.timestampMs)} / 抽選行: {groupItem.hits.length}
-                    </p>
-                    {groupItem.hits.length === 0 ? (
-                      <p className="text-xs text-stone-500">この時点の抽選テキストはありません。</p>
-                    ) : (
-                      <ul className="space-y-1 text-xs text-stone-700">
-                        {groupItem.hits.map((line) => (
-                          <li key={`${groupItem.docId}-${line}`} className="font-mono whitespace-pre-wrap">
-                            {line}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
+              {aggregatedHitRows.length === 0 ? (
+                <p className="text-sm text-stone-500">表示できる抽選結果はありません。</p>
+              ) : (
+                <ul className="space-y-1 text-xs text-stone-700">
+                  {aggregatedHitRows.map((row) => (
+                    <li key={row.key} className="font-mono whitespace-pre-wrap">
+                      {row.line}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="rounded-3xl border border-stone-200 bg-white/80 p-6 shadow-sm">
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
                 <p className="font-semibold text-stone-700">画像一覧</p>
-                <p>合計 {totalImageCount} 枚</p>
+                <p>取得アカウント数: {imageGroups.length}</p>
               </div>
-              {groupsWithImages.length === 0 ? (
-                <p className="text-sm text-stone-500">表示できる画像はありません。</p>
-              ) : (
-                <div className="space-y-5">
-                  {groupsWithImages.map((groupItem) => (
-                    <div key={`images-${groupItem.docId}`} className="space-y-2">
-                      <p className="text-xs font-semibold text-stone-700">
-                        {formatTimestamp(groupItem.timestampMs)} / 画像: {groupItem.imagePaths.length}
-                      </p>
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {groupItem.imagePaths.map((imagePath) => {
-                          const imageUrl = buildStorageImageUrl(storageBucket, imagePath);
-
-                          return (
-                            <div
-                              key={`${groupItem.docId}-${imagePath}`}
-                              className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"
-                            >
-                              {imageUrl ? (
-                                <img
-                                  src={imageUrl}
-                                  alt="application"
-                                  loading="lazy"
-                                  className="h-full w-full object-cover"
-                                />
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ResultsImageGallery imageUrls={resultImageUrls} />
             </section>
           </div>
         )}
@@ -190,6 +154,70 @@ async function getAllApplicationImageGroups(
   return groups;
 }
 
+function buildAggregatedHitRows(groups: ApplicationImageGroup[]): AggregatedHitRow[] {
+  const rows: AggregatedHitRow[] = groups.flatMap((groupItem) =>
+    groupItem.hits.map((line, index) => ({
+      key: `${groupItem.docId}-${index}-${line}`,
+      line,
+      sortDateMs: extractDateMsFromHitLine(line),
+      sourceTimestampMs: groupItem.timestampMs,
+    })),
+  );
+
+  rows.sort((a, b) => {
+    if (a.sortDateMs !== null && b.sortDateMs !== null && a.sortDateMs !== b.sortDateMs) {
+      return a.sortDateMs - b.sortDateMs;
+    }
+    if (a.sortDateMs !== null && b.sortDateMs === null) {
+      return -1;
+    }
+    if (a.sortDateMs === null && b.sortDateMs !== null) {
+      return 1;
+    }
+    if (a.sourceTimestampMs !== b.sourceTimestampMs) {
+      return a.sourceTimestampMs - b.sourceTimestampMs;
+    }
+    return a.line.localeCompare(b.line, "ja");
+  });
+
+  return rows;
+}
+
+function buildResultImageUrls(
+  groups: ApplicationImageGroup[],
+  storageBucket: string,
+): string[] {
+  return groups.flatMap((groupItem) =>
+    groupItem.imagePaths
+      .map((imagePath) => buildStorageImageUrl(storageBucket, imagePath))
+      .filter((url): url is string => Boolean(url)),
+  );
+}
+
+function extractDateMsFromHitLine(line: string): number | null {
+  const columns = line.split("\t").map((value) => value.trim());
+  const dateText = columns[1] ?? "";
+  return parseJapaneseDateLabel(dateText);
+}
+
+function parseJapaneseDateLabel(dateText: string): number | null {
+  const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.getTime();
+}
+
 function parseTimestampDocId(docId: string): number | null {
   const trimmed = docId.trim();
 
@@ -218,16 +246,4 @@ function buildStorageImageUrl(storageBucket: string, imagePath: string): string 
   }
 
   return `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o/${encodeURIComponent(trimmed)}?alt=media`;
-}
-
-function formatTimestamp(timestampMs: number): string {
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).format(new Date(timestampMs));
 }
