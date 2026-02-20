@@ -35,6 +35,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const totalImageCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.imagePaths.length, 0);
   const totalHitCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.hits.length, 0);
   const storageBucket = resolveStorageBucket();
+  const groupsWithImages = imageGroups.filter((groupItem) => groupItem.imagePaths.length > 0);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -72,54 +73,73 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
           </div>
         ) : (
           <div className="space-y-6">
-            {imageGroups.map((groupItem) => (
-              <section
-                key={groupItem.docId}
-                className="rounded-3xl border border-stone-200 bg-white/80 p-6 shadow-sm"
-              >
-                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
-                  <p className="font-semibold text-stone-700">取得日時</p>
-                  <p>
-                    {formatTimestamp(groupItem.timestampMs)}
-                    {" / "}抽選行: {groupItem.hits.length}
-                    {" / "}画像: {groupItem.imagePaths.length}
-                  </p>
-                </div>
-                {groupItem.hits.length > 0 ? (
-                  <div className="mb-4 rounded-2xl border border-stone-200 bg-stone-50 p-4">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-stone-600">Hits</p>
-                    <ul className="space-y-1 text-xs text-stone-700">
-                      {groupItem.hits.map((line) => (
-                        <li key={`${groupItem.docId}-${line}`} className="font-mono whitespace-pre-wrap">
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
+            <section className="rounded-3xl border border-stone-200 bg-white/80 p-6 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+                <p className="font-semibold text-stone-700">抽選テキスト</p>
+                <p>合計 {totalHitCount} 行</p>
+              </div>
+              <div className="space-y-3">
+                {imageGroups.map((groupItem) => (
+                  <div key={`text-${groupItem.docId}`} className="rounded-2xl border border-stone-200 bg-stone-50 p-4">
+                    <p className="mb-2 text-xs font-semibold text-stone-700">
+                      {formatTimestamp(groupItem.timestampMs)} / 抽選行: {groupItem.hits.length}
+                    </p>
+                    {groupItem.hits.length === 0 ? (
+                      <p className="text-xs text-stone-500">この時点の抽選テキストはありません。</p>
+                    ) : (
+                      <ul className="space-y-1 text-xs text-stone-700">
+                        {groupItem.hits.map((line) => (
+                          <li key={`${groupItem.docId}-${line}`} className="font-mono whitespace-pre-wrap">
+                            {line}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
-                ) : null}
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {groupItem.imagePaths.map((imagePath) => {
-                    const imageUrl = buildStorageImageUrl(storageBucket, imagePath);
+                ))}
+              </div>
+            </section>
 
-                    return (
-                      <div
-                        key={`${groupItem.docId}-${imagePath}`}
-                        className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"
-                      >
-                        {imageUrl ? (
-                          <img
-                            src={imageUrl}
-                            alt="application"
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : null}
+            <section className="rounded-3xl border border-stone-200 bg-white/80 p-6 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+                <p className="font-semibold text-stone-700">画像一覧</p>
+                <p>合計 {totalImageCount} 枚</p>
+              </div>
+              {groupsWithImages.length === 0 ? (
+                <p className="text-sm text-stone-500">表示できる画像はありません。</p>
+              ) : (
+                <div className="space-y-5">
+                  {groupsWithImages.map((groupItem) => (
+                    <div key={`images-${groupItem.docId}`} className="space-y-2">
+                      <p className="text-xs font-semibold text-stone-700">
+                        {formatTimestamp(groupItem.timestampMs)} / 画像: {groupItem.imagePaths.length}
+                      </p>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {groupItem.imagePaths.map((imagePath) => {
+                          const imageUrl = buildStorageImageUrl(storageBucket, imagePath);
+
+                          return (
+                            <div
+                              key={`${groupItem.docId}-${imagePath}`}
+                              className="overflow-hidden rounded-2xl border border-stone-200 bg-stone-50"
+                            >
+                              {imageUrl ? (
+                                <img
+                                  src={imageUrl}
+                                  alt="application"
+                                  loading="lazy"
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : null}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
-              </section>
-            ))}
+              )}
+            </section>
           </div>
         )}
       </section>
