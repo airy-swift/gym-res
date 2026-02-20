@@ -394,34 +394,11 @@ function filterGroupsByMonth(groups: ApplicationImageGroup[], targetMonth: Month
 }
 
 function resolveDisplayMonthForGroup(groupItem: ApplicationImageGroup): MonthCursor | null {
-  for (const line of groupItem.hits) {
-    const parsed = parseHitLine(line);
-    const hitMonth = parseYearMonthFromDateLabel(parsed.date);
-    if (hitMonth) {
-      return hitMonth;
-    }
-  }
-
   const createdMonth = extractJstYearMonth(groupItem.createdAtMs);
   if (!createdMonth) {
     return null;
   }
   return shiftMonth(createdMonth, 1);
-}
-
-function parseYearMonthFromDateLabel(dateText: string): MonthCursor | null {
-  const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  if (!year || !month || month < 1 || month > 12) {
-    return null;
-  }
-
-  return { year, month };
 }
 
 function extractJstYearMonth(timestampMs: number): MonthCursor | null {
