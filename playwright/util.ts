@@ -272,6 +272,64 @@ export async function saveApplicationHits({
   }
 }
 
+type ResetApplicationsMonthParams = {
+  groupId: string;
+  yearMonth?: string;
+};
+
+export async function resetApplicationsMonth({
+  groupId,
+  yearMonth,
+}: ResetApplicationsMonthParams): Promise<boolean> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
+  const apiToken = process.env.API_TOKEN;
+
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping applications month reset.');
+    return false;
+  }
+
+  try {
+    const endpoint = `${apiBaseUrl.replace(/\/?$/, '')}/api/groups/applications/month/reset`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        API_TOKEN: apiToken,
+      },
+      body: JSON.stringify({
+        groupId,
+        ...(yearMonth ? { yearMonth } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      logEarlyReturn(`Failed to reset applications month (status ${response.status}): ${text}`);
+      return false;
+    }
+
+    const payload = (await response.json()) as {
+      targetYearMonth?: unknown;
+      deletedDocs?: unknown;
+      deletedImages?: unknown;
+      skippedDocIds?: unknown;
+    };
+    const targetYearMonth = typeof payload.targetYearMonth === 'string' ? payload.targetYearMonth : 'unknown';
+    const deletedDocs = typeof payload.deletedDocs === 'number' ? payload.deletedDocs : 0;
+    const deletedImages = typeof payload.deletedImages === 'number' ? payload.deletedImages : 0;
+    const skippedCount = Array.isArray(payload.skippedDocIds) ? payload.skippedDocIds.length : 0;
+
+    logEarlyReturn(
+      `Reset applications month ${targetYearMonth}: deletedDocs=${deletedDocs}, deletedImages=${deletedImages}, skippedDocs=${skippedCount}`,
+    );
+    return skippedCount === 0;
+  } catch (error) {
+    logEarlyReturn(`Failed to reset applications month: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
 export function deriveUdParam(dateText: string): string | null {
   const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   if (!match) {

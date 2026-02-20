@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { cleanupJobCredentials, logEarlyReturn, saveApplicationHits, uploadApplicationImage } from './util';
+import { cleanupJobCredentials, logEarlyReturn, resetApplicationsMonth, saveApplicationHits, uploadApplicationImage } from './util';
 import { loadEnv } from './env';
 import { runLoginPage } from './page/login_page';
 import type { RepresentativeEntry } from './types';
@@ -39,6 +39,8 @@ export async function main(): Promise<void> {
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const fixed = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[2], screenshotPaths);
 
+    await resetCurrentMonthApplicationsOrThrow();
+
     const timestamp = Date.now().toString();
     await persistHitSummary(hits, fixed, timestamp);
     await uploadRequestStatusScreenshots(screenshotPaths, timestamp);
@@ -53,6 +55,25 @@ export async function main(): Promise<void> {
     throw error;
   } finally {
     await browser?.close();
+  }
+}
+
+async function resetCurrentMonthApplicationsOrThrow(): Promise<void> {
+  const groupId = (process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID ?? '').trim();
+  const apiBaseUrl = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').trim();
+  const apiToken = (process.env.API_TOKEN ?? '').trim();
+  if (!groupId) {
+    logEarlyReturn('PLAYWRIGHT_GROUP_ID is not set; skipping monthly applications reset.');
+    return;
+  }
+  if (!apiBaseUrl || !apiToken) {
+    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping monthly applications reset.');
+    return;
+  }
+
+  const resetSucceeded = await resetApplicationsMonth({ groupId });
+  if (!resetSucceeded) {
+    throw new Error('Failed to reset current month applications before saving hit results.');
   }
 }
 
@@ -120,15 +141,12 @@ async function uploadRequestStatusScreenshots(screenshotPaths: string[], timesta
 }
 
 function buildStandardizedHitLines(hits: RepresentativeEntry[], fixed: RepresentativeEntry[]): string[] {
-  const hitLines = hits.map(entry => formatHitLine('HIT', entry));
-  const fixedLines = fixed.map(entry => formatHitLine('FIXED', entry));
-  return Array.from(new Set([...hitLines, ...fixedLines]));
+  return Array.from(new Set([...hits, ...fixed].map(entry => formatHitLine(entry))));
 }
 
-function formatHitLine(status: 'HIT' | 'FIXED', entry: RepresentativeEntry): string {
+function formatHitLine(entry: RepresentativeEntry): string {
   const normalize = (value?: string) => (value ?? '').replace(/\s+/g, ' ').trim() || '-';
   return [
-    status,
     normalize(entry.date),
     normalize(entry.time),
     normalize(entry.gymName),

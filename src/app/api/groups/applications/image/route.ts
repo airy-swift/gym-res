@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { arrayUnion, doc, setDoc } from "firebase/firestore";
+import { arrayUnion, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes } from "firebase/storage";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
@@ -67,9 +67,15 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getFirestoreDb();
+    const applicationRef = doc(db, "groups", groupId, "applications", timestamp);
+    const existingDoc = await getDoc(applicationRef);
+
     await setDoc(
-      doc(db, "groups", groupId, "applications", timestamp),
-      { images: arrayUnion(storagePath) },
+      applicationRef,
+      {
+        images: arrayUnion(storagePath),
+        ...(existingDoc.data()?.created_at == null ? { created_at: serverTimestamp() } : {}),
+      },
       { merge: true },
     );
 

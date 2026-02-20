@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
 import { getFirestoreDb } from "@/lib/firebase/app";
@@ -53,9 +53,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getFirestoreDb();
+    const applicationRef = doc(db, "groups", groupId, "applications", timestamp);
+    const existingDoc = await getDoc(applicationRef);
+
     await setDoc(
-      doc(db, "groups", groupId, "applications", timestamp),
-      { hits },
+      applicationRef,
+      {
+        hits,
+        ...(existingDoc.data()?.created_at == null ? { created_at: serverTimestamp() } : {}),
+      },
       { merge: true },
     );
 

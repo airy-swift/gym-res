@@ -7,6 +7,11 @@ type UploadToStorageParams = {
   contentType: string;
 };
 
+type DeleteFromStorageParams = {
+  bucket: string;
+  objectPath: string;
+};
+
 type ServiceAccountConfig = {
   clientEmail: string;
   privateKey: string;
@@ -141,5 +146,28 @@ export async function uploadToStorageWithServiceAccount({
   if (!response.ok) {
     const payload = await response.text();
     throw new Error(`GCS upload failed (${response.status}): ${payload}`);
+  }
+}
+
+export async function deleteFromStorageWithServiceAccount({
+  bucket,
+  objectPath,
+}: DeleteFromStorageParams): Promise<void> {
+  const accessToken = await getAccessToken();
+  const endpoint = `https://storage.googleapis.com/storage/v1/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(objectPath)}`;
+  const response = await fetch(endpoint, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    const payload = await response.text();
+    throw new Error(`GCS delete failed (${response.status}): ${payload}`);
   }
 }
