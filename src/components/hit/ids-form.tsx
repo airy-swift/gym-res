@@ -13,6 +13,7 @@ export function HitIdsForm({ groupId, initialValue }: HitIdsFormProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [testMessage, setTestMessage] = useState<string | null>(null);
+  const resultsHref = `/results?gp=${encodeURIComponent(groupId)}`;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,7 +66,9 @@ export function HitIdsForm({ groupId, initialValue }: HitIdsFormProps) {
       }
 
       setTestStatus("success");
-      setTestMessage("テスト実行を開始しました。GitHub Actions の Hit Runner を確認してください。");
+      setTestMessage(
+        "テスト実行を開始しました。GitHub Actions の Hit Runner を確認してください。2~3分待ったら下記のリンクを開いてください。",
+      );
     } catch (error) {
       console.error("Failed to trigger hit test", error);
       setTestStatus("error");
@@ -112,9 +115,17 @@ export function HitIdsForm({ groupId, initialValue }: HitIdsFormProps) {
           {testStatus === "running" ? "テスト実行中..." : "Hit テスト実行"}
         </button>
         {testMessage ? (
-          <p className={`mt-2 text-center text-sm ${testStatus === "error" ? "text-red-600" : "text-stone-700"}`}>
-            {testMessage}
-          </p>
+          <div className={`mt-2 text-center text-sm ${testStatus === "error" ? "text-red-600" : "text-stone-700"}`}>
+            <p>{testMessage}</p>
+            {testStatus === "success" ? (
+              <a
+                href={resultsHref}
+                className="mt-1 inline-block font-semibold text-sky-700 underline underline-offset-2 transition hover:text-sky-800"
+              >
+                抽選結果確認
+              </a>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </form>
