@@ -61,9 +61,47 @@ jobs:
             echo "total=$TOTAL"
           } >> "$GITHUB_OUTPUT"
 
+  reset-applications:
+    runs-on: ubuntu-latest
+    needs: prepare-matrix
+    if: needs.prepare-matrix.outputs.total != '0'
+    timeout-minutes: 10
+    steps:
+      - name: Reset monthly applications by group
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+          MATRIX_JSON: ${{ needs.prepare-matrix.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
+          test -n "$API_TOKEN" || { echo 'API_TOKEN secret is required'; exit 1; }
+          test -n "${MATRIX_JSON:-}" || { echo 'matrix output is empty'; exit 1; }
+
+          GROUP_IDS=$(echo "$MATRIX_JSON" | jq -r '.[].groupId' | sort -u)
+          if [ -z "$GROUP_IDS" ]; then
+            echo 'No groups to reset.'
+            exit 0
+          fi
+
+          while IFS= read -r GROUP_ID; do
+            [ -n "$GROUP_ID" ] || continue
+            echo "Reset applications for group: $GROUP_ID"
+            PAYLOAD=$(jq -cn --arg groupId "$GROUP_ID" '{groupId: $groupId}')
+            curl -sSf "$API_BASE_URL/api/groups/applications/month/reset" \
+              -X POST \
+              -H "API_TOKEN: $API_TOKEN" \
+              -H 'Content-Type: application/json' \
+              -H 'Accept: application/json' \
+              --data "$PAYLOAD"
+            echo
+          done <<< "$GROUP_IDS"
+
   run-hit-jobs:
     name: run-hit-${{ matrix.target.groupId }}
-    needs: prepare-matrix
+    needs:
+      - prepare-matrix
+      - reset-applications
     if: needs.prepare-matrix.outputs.total != '0'
     strategy:
       fail-fast: false

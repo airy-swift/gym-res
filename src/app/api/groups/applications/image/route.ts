@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
 
   const groupId = toTrimmedString(formData.get("groupId"));
   const timestamp = toTrimmedString(formData.get("timestamp"));
+  const applicationIdValue = toTrimmedString(formData.get("applicationId"));
   const rawFileName = toTrimmedString(formData.get("fileName"));
   const image = formData.get("image");
 
@@ -33,6 +34,11 @@ export async function POST(request: NextRequest) {
 
   if (!timestamp || !/^\d+$/.test(timestamp)) {
     return NextResponse.json({ error: "Invalid timestamp" }, { status: 400 });
+  }
+
+  const applicationId = resolveApplicationId(timestamp, applicationIdValue);
+  if (!applicationId) {
+    return NextResponse.json({ error: "Invalid applicationId" }, { status: 400 });
   }
 
   if (!(image instanceof File)) {
@@ -67,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getFirestoreDb();
-    const applicationRef = doc(db, "groups", groupId, "applications", timestamp);
+    const applicationRef = doc(db, "groups", groupId, "applications", applicationId);
     const existingDoc = await getDoc(applicationRef);
 
     await setDoc(
@@ -101,4 +107,16 @@ function sanitizeFileName(rawValue: string): string {
   const baseName = rawValue.split(/[\\/]/).pop() ?? "image.jpg";
   const replaced = baseName.replace(/[^A-Za-z0-9._-]/g, "_");
   return replaced || "image.jpg";
+}
+
+function resolveApplicationId(timestamp: string, value: string): string | null {
+  if (!value) {
+    return timestamp;
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    return null;
+  }
+
+  return value;
 }

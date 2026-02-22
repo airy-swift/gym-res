@@ -271,12 +271,12 @@ function parseJapaneseDateLabel(dateText: string): number | null {
 
 function parseTimestampDocId(docId: string): number | null {
   const trimmed = docId.trim();
-
-  if (!/^\d+$/.test(trimmed)) {
+  const match = trimmed.match(/^(\d+)(?:[-_].+)?$/);
+  if (!match) {
     return null;
   }
 
-  const value = Number(trimmed);
+  const value = Number(match[1]);
   const normalized = normalizeEpochMs(value);
   if (!Number.isFinite(normalized) || normalized <= 0) {
     return null;

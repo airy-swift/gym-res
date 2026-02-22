@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 type SaveApplicationHitsBody = {
   groupId?: unknown;
   timestamp?: unknown;
+  applicationId?: unknown;
   hits?: unknown;
 };
 
@@ -28,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   const groupId = typeof body.groupId === "string" ? body.groupId.trim() : "";
   const timestamp = typeof body.timestamp === "string" ? body.timestamp.trim() : "";
+  const applicationIdValue = typeof body.applicationId === "string" ? body.applicationId.trim() : "";
   const rawHits = Array.isArray(body.hits) ? body.hits : null;
 
   if (!groupId) {
@@ -36,6 +38,11 @@ export async function POST(request: NextRequest) {
 
   if (!timestamp || !/^\d+$/.test(timestamp)) {
     return NextResponse.json({ error: "Invalid timestamp" }, { status: 400 });
+  }
+
+  const applicationId = resolveApplicationId(timestamp, applicationIdValue);
+  if (!applicationId) {
+    return NextResponse.json({ error: "Invalid applicationId" }, { status: 400 });
   }
 
   if (!rawHits) {
@@ -53,7 +60,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const db = getFirestoreDb();
-    const applicationRef = doc(db, "groups", groupId, "applications", timestamp);
+    const applicationRef = doc(db, "groups", groupId, "applications", applicationId);
     const existingDoc = await getDoc(applicationRef);
 
     await setDoc(
@@ -70,4 +77,16 @@ export async function POST(request: NextRequest) {
     console.error("Failed to save application hits", error);
     return NextResponse.json({ error: "Failed to save hits" }, { status: 500 });
   }
+}
+
+function resolveApplicationId(timestamp: string, value: string): string | null {
+  if (!value) {
+    return timestamp;
+  }
+
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    return null;
+  }
+
+  return value;
 }

@@ -180,6 +180,7 @@ export async function cleanupJobCredentials(): Promise<void> {
 type UploadApplicationImageParams = {
   groupId: string;
   timestamp: string;
+  applicationId?: string;
   fileName: string;
   imageData: Uint8Array;
   contentType?: string;
@@ -188,6 +189,7 @@ type UploadApplicationImageParams = {
 export async function uploadApplicationImage({
   groupId,
   timestamp,
+  applicationId,
   fileName,
   imageData,
   contentType = 'image/jpeg',
@@ -205,6 +207,9 @@ export async function uploadApplicationImage({
     const formData = new FormData();
     formData.set('groupId', groupId);
     formData.set('timestamp', timestamp);
+    if (applicationId) {
+      formData.set('applicationId', applicationId);
+    }
     formData.set('fileName', fileName);
     formData.set('image', new Blob([Buffer.from(imageData)], { type: contentType }), fileName);
 
@@ -232,12 +237,14 @@ export async function uploadApplicationImage({
 type SaveApplicationHitsParams = {
   groupId: string;
   timestamp: string;
+  applicationId?: string;
   hits: string[];
 };
 
 export async function saveApplicationHits({
   groupId,
   timestamp,
+  applicationId,
   hits,
 }: SaveApplicationHitsParams): Promise<boolean> {
   const apiBaseUrl = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
@@ -256,7 +263,7 @@ export async function saveApplicationHits({
         'Content-Type': 'application/json',
         API_TOKEN: apiToken,
       },
-      body: JSON.stringify({ groupId, timestamp, hits }),
+      body: JSON.stringify({ groupId, timestamp, applicationId, hits }),
     });
 
     if (!response.ok) {

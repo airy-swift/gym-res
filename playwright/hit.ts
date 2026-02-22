@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { cleanupJobCredentials, logEarlyReturn, resetApplicationsMonth, saveApplicationHits, uploadApplicationImage } from './util';
+import { cleanupJobCredentials, logEarlyReturn, saveApplicationHits, uploadApplicationImage } from './util';
 import { loadEnv } from './env';
 import { runLoginPage } from './page/login_page';
 import type { RepresentativeEntry } from './types';
@@ -39,11 +39,10 @@ export async function main(): Promise<void> {
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const fixed = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[2], screenshotPaths);
 
-    await resetCurrentMonthApplicationsOrThrow();
-
     const timestamp = Date.now().toString();
-    await persistHitSummary(hits, fixed, timestamp);
-    await uploadRequestStatusScreenshots(screenshotPaths, timestamp);
+    const applicationId = buildApplicationId(timestamp);
+    await persistHitSummary(hits, fixed, timestamp, applicationId);
+    await uploadRequestStatusScreenshots(screenshotPaths, timestamp, applicationId);
     logEarlyReturn(`Hit status summary: hits=${hits.length}, fixed=${fixed.length}`);
 
     console.log(hits);
@@ -58,29 +57,11 @@ export async function main(): Promise<void> {
   }
 }
 
-async function resetCurrentMonthApplicationsOrThrow(): Promise<void> {
-  const groupId = (process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID ?? '').trim();
-  const apiBaseUrl = (process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').trim();
-  const apiToken = (process.env.API_TOKEN ?? '').trim();
-  if (!groupId) {
-    logEarlyReturn('PLAYWRIGHT_GROUP_ID is not set; skipping monthly applications reset.');
-    return;
-  }
-  if (!apiBaseUrl || !apiToken) {
-    logEarlyReturn('API_BASE_URL or API_TOKEN missing; skipping monthly applications reset.');
-    return;
-  }
-
-  const resetSucceeded = await resetApplicationsMonth({ groupId });
-  if (!resetSucceeded) {
-    throw new Error('Failed to reset current month applications before saving hit results.');
-  }
-}
-
 async function persistHitSummary(
   hits: RepresentativeEntry[],
   fixed: RepresentativeEntry[],
   timestamp: string,
+  applicationId: string,
 ): Promise<void> {
   const groupId = (process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID ?? '').trim();
   if (!groupId) {
@@ -89,11 +70,15 @@ async function persistHitSummary(
   }
 
   const lines = buildStandardizedHitLines(hits, fixed);
-  const saved = await saveApplicationHits({ groupId, timestamp, hits: lines });
+  const saved = await saveApplicationHits({ groupId, timestamp, applicationId, hits: lines });
   logEarlyReturn(`Saved standardized hit lines: ${saved ? lines.length : 0}/${lines.length}`);
 }
 
-async function uploadRequestStatusScreenshots(screenshotPaths: string[], timestamp: string): Promise<void> {
+async function uploadRequestStatusScreenshots(
+  screenshotPaths: string[],
+  timestamp: string,
+  applicationId: string,
+): Promise<void> {
   const groupId = (process.env.PLAYWRIGHT_GROUP_ID ?? process.env.GROUP_ID ?? '').trim();
   if (!groupId) {
     logEarlyReturn('PLAYWRIGHT_GROUP_ID is not set; skipping request-status screenshot upload.');
@@ -121,6 +106,7 @@ async function uploadRequestStatusScreenshots(screenshotPaths: string[], timesta
       const uploaded = await uploadApplicationImage({
         groupId,
         timestamp,
+        applicationId,
         fileName,
         imageData,
         contentType: 'image/jpeg',
@@ -138,6 +124,14 @@ async function uploadRequestStatusScreenshots(screenshotPaths: string[], timesta
   }
 
   logEarlyReturn(`Uploaded request-status screenshots: ${uploadedCount}/${requestStatusPaths.length}`);
+}
+
+function buildApplicationId(timestamp: string): string {
+  const rowIndex = (process.env.PLAYWRIGHT_ROW_INDEX ?? '').trim();
+  if (/^\d+$/.test(rowIndex)) {
+    return `${timestamp}-${rowIndex}`;
+  }
+  return timestamp;
 }
 
 function buildStandardizedHitLines(hits: RepresentativeEntry[], fixed: RepresentativeEntry[]): string[] {

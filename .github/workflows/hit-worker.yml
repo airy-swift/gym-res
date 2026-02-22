@@ -26,6 +26,7 @@ jobs:
     timeout-minutes: 30
     env:
       PLAYWRIGHT_GROUP_ID: ${{ inputs.group_id }}
+      PLAYWRIGHT_ROW_INDEX: ${{ inputs.row_index }}
       API_BASE_URL: ${{ secrets.api_base_url }}
       API_TOKEN: ${{ secrets.api_token }}
     steps:
