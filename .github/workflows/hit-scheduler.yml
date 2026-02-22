@@ -8,8 +8,8 @@ on:
         required: false
         type: string
   schedule:
-    # JST 09:05 on 11th and 23rd = UTC 00:05 on 11th and 23rd
-    - cron: '5 0 11,23 * *'
+    # JST 03:05 on 11th and 23rd = UTC 18:05 on 10th and 22nd
+    - cron: '5 18 10,22 * *'
 
 permissions:
   contents: read
