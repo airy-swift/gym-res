@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { logEarlyReturn } from '../util';
 
-const URL = 'https://yoyaku.harp.lg.jp/sapporo/Login';
+const LOGIN_URL = 'https://yoyaku.harp.lg.jp/sapporo/Login';
 
 export async function runLoginPage(page: Page): Promise<void> {
   const loginBtn = page.getByRole('link', { name: 'ログインする' });
@@ -14,13 +14,17 @@ export async function runLoginPage(page: Page): Promise<void> {
     return;
   }
 
-  await page.waitForURL(current => current.toString().startsWith(URL), {
+  await page.waitForURL(current => current.toString().startsWith(LOGIN_URL), {
     timeout: 10_000,
   });
 
-  
   await page.fill('input[name="userId"]', process.env.SERVICE_USER ?? '');
   await page.fill('input[name="password"]', process.env.SERVICE_PASS ?? '');
-
-  await page.getByRole('button', { name: 'ログイン', exact: true }).click();
+  await Promise.all([
+    page.waitForURL(current => !current.toString().startsWith(LOGIN_URL), {
+      timeout: 15_000,
+    }),
+    page.getByRole('button', { name: 'ログイン', exact: true }).click(),
+  ]);
+  await page.waitForLoadState('domcontentloaded');
 }

@@ -39,14 +39,21 @@ jobs:
           set -euo pipefail
           test -n "$API_BASE_URL" || { echo 'API_BASE_URL secret is required'; exit 1; }
           test -n "$API_TOKEN" || { echo 'API_TOKEN secret is required'; exit 1; }
+          HIT_TARGETS_ENDPOINT="${API_BASE_URL%/}/api/internal/hit-targets"
 
           if [ -n "${TARGET_GROUP_ID:-}" ]; then
-            RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+            RESPONSE_JSON=$(curl --silent --show-error --fail --http1.1 \
+              --retry 5 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 10 --max-time 45 \
+              -G "$HIT_TARGETS_ENDPOINT" \
               -H "API_TOKEN: $API_TOKEN" \
               --data-urlencode "groupId=$TARGET_GROUP_ID" \
               -H 'Accept: application/json')
           else
-            RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+            RESPONSE_JSON=$(curl --silent --show-error --fail --http1.1 \
+              --retry 5 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 10 --max-time 45 \
+              -G "$HIT_TARGETS_ENDPOINT" \
               -H "API_TOKEN: $API_TOKEN" \
               -H 'Accept: application/json')
           fi
@@ -88,7 +95,11 @@ jobs:
             [ -n "$GROUP_ID" ] || continue
             echo "Reset applications for group: $GROUP_ID"
             PAYLOAD=$(jq -cn --arg groupId "$GROUP_ID" '{groupId: $groupId}')
-            curl -sSf "$API_BASE_URL/api/groups/applications/month/reset" \
+            RESET_ENDPOINT="${API_BASE_URL%/}/api/groups/applications/month/reset"
+            curl --silent --show-error --fail --http1.1 \
+              --retry 5 --retry-all-errors --retry-delay 2 \
+              --connect-timeout 10 --max-time 45 \
+              "$RESET_ENDPOINT" \
               -X POST \
               -H "API_TOKEN: $API_TOKEN" \
               -H 'Content-Type: application/json' \

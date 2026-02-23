@@ -40,9 +40,14 @@ export async function ensureRequestStatusPage(
   filter: RequestStatusFilter,
   screenshotPaths?: string[],
 ): Promise<RepresentativeEntry[]> {
-  await page.waitForURL(url => url.toString().startsWith(REQUEST_STATUS_URL), {
-    timeout: 10_000,
-  });
+  if (!page.url().startsWith(REQUEST_STATUS_URL)) {
+    await page.waitForURL(url => url.toString().startsWith(REQUEST_STATUS_URL), {
+      timeout: 10_000,
+      waitUntil: 'domcontentloaded',
+    });
+  } else {
+    await page.waitForLoadState('domcontentloaded');
+  }
   await page.getByRole('button', { name: /申込状態：\s*すべての状態/ }).click();
   await page.getByRole('button', { name: filter.ja, exact: true }).click();
   await new Promise(resolve => setTimeout(resolve, 3_000));

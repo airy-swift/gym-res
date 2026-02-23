@@ -46,7 +46,11 @@ jobs:
       - name: Resolve credential via internal API
         run: |
           set -euo pipefail
-          RESPONSE_JSON=$(curl -sSf -G "$API_BASE_URL/api/internal/hit-targets" \
+          HIT_TARGETS_ENDPOINT="${API_BASE_URL%/}/api/internal/hit-targets"
+          RESPONSE_JSON=$(curl --silent --show-error --fail --http1.1 \
+            --retry 5 --retry-all-errors --retry-delay 2 \
+            --connect-timeout 10 --max-time 45 \
+            -G "$HIT_TARGETS_ENDPOINT" \
             -H "API_TOKEN: $API_TOKEN" \
             --data-urlencode "groupId=${{ inputs.group_id }}" \
             --data-urlencode "rowIndex=${{ inputs.row_index }}" \
