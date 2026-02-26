@@ -140,9 +140,23 @@ function buildStandardizedHitLines(hits: RepresentativeEntry[], fixed: Represent
 
 function formatHitLine(entry: RepresentativeEntry): string {
   const normalize = (value?: string) => (value ?? '').replace(/\s+/g, ' ').trim() || '-';
+  const normalizeDate = (value?: string) => {
+    const normalized = normalize(value);
+    const match = normalized.match(/(?:\d{4}年)?\s*(\d{1,2})月\s*(\d{1,2})日/);
+    if (!match) {
+      return normalized;
+    }
+    return `${Number(match[1])}月${Number(match[2])}日`;
+  };
+  const normalizeTime = (value?: string) => {
+    const normalized = normalize(value);
+    return normalized.replace(/(^|[^0-9])(\d{1,2}):([0-5]\d)(?=[^0-9]|$)/g, (_, prefix: string, hour: string, minute: string) => {
+      return `${prefix}${Number(hour)}:${minute}`;
+    });
+  };
   return [
-    normalize(entry.date),
-    normalize(entry.time),
+    normalizeDate(entry.date),
+    normalizeTime(entry.time),
     normalize(entry.gymName),
     normalize(entry.room),
   ].join('\t');

@@ -252,14 +252,28 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
 }
 
 function parseJapaneseDateLabel(dateText: string): number | null {
-  const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (!match) {
+  const fullMatch = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
+  if (fullMatch) {
+    const year = Number(fullMatch[1]);
+    const month = Number(fullMatch[2]);
+    const day = Number(fullMatch[3]);
+    const date = new Date(year, month - 1, day);
+
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+
+    return date.getTime();
+  }
+
+  const monthDayMatch = dateText.match(/(\d{1,2})月(\d{1,2})日/);
+  if (!monthDayMatch) {
     return null;
   }
 
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
+  const year = getTodayInJst().year;
+  const month = Number(monthDayMatch[1]);
+  const day = Number(monthDayMatch[2]);
   const date = new Date(year, month - 1, day);
 
   if (Number.isNaN(date.getTime())) {
