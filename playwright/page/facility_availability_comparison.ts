@@ -61,26 +61,58 @@ async function findBoothRow(page: Page, normalizedBoothName: string): Promise<Lo
   //   return rows.nth(2);
   // }
 
-  const labels: string[] = await rows.evaluateAll((trs) =>
-    trs.map((tr) => {
-      const el = tr.querySelector<HTMLElement>(
-        'th.AvailabilityFrames_gridTable_tbody_rowTitle .v-btn__content'
-      );
-      return (el?.textContent ?? '').trim();
-    })
-  );
+  const rowsMeta: Array<{ label: string; rowText: string; selector: string }> = await rows.evaluateAll((trs) => {
+    const selectors = [
+      'th.AvailabilityFrames_gridTable_tbody_rowTitle .v-btn__content',
+      'th.AvailabilityFrames_gridTable_tbody_rowTitle button',
+      'th.AvailabilityFrames_gridTable_tbody_rowTitle',
+      'th',
+      'td',
+    ];
+    return trs.map((tr) => {
+      let label = '';
+      let matchedSelector = '';
+      for (const selector of selectors) {
+        const el = tr.querySelector<HTMLElement>(selector);
+        const text = (el?.textContent ?? '').trim();
+        if (!text) {
+          continue;
+        }
+        label = text;
+        matchedSelector = selector;
+        break;
+      }
+      const rowText = (tr.textContent ?? '').replace(/\s+/g, ' ').trim();
+      return {
+        label,
+        rowText,
+        selector: matchedSelector,
+      };
+    });
+  });
 
+  const boothCandidates = buildBoothCandidates(normalizedBoothName);
   let fallbackIndex: number | undefined;
 
-  for (let i = 0; i < labels.length; i += 1) {
-    const normalizedLabel = normalizeComparisonLabel(labels[i]);
+  for (let i = 0; i < rowsMeta.length; i += 1) {
+    const row = rowsMeta[i];
+    const normalizedLabel = normalizeComparisonLabel(row.label || row.rowText);
     if (!normalizedLabel) continue;
 
-    if (normalizedLabel === normalizedBoothName) return rows.nth(i);
-    if (fallbackIndex === undefined && normalizedLabel.includes(normalizedBoothName)) fallbackIndex = i;
+    if (boothCandidates.some(candidate => normalizedLabel === candidate)) {
+      return rows.nth(i);
+    }
+    if (
+      fallbackIndex === undefined
+      && boothCandidates.some(candidate => normalizedLabel.includes(candidate) || candidate.includes(normalizedLabel))
+    ) {
+      fallbackIndex = i;
+    }
   }
 
-  if (fallbackIndex !== undefined) return rows.nth(fallbackIndex);
+  if (fallbackIndex !== undefined) {
+    return rows.nth(fallbackIndex);
+  }
 
   throwLoggedError(
     `[runFacilityAvailabilityComparisonPage] ブース "${normalizedBoothName}" に一致する行が見つかりませんでした。`
@@ -89,7 +121,7 @@ async function findBoothRow(page: Page, normalizedBoothName: string): Promise<Lo
 
 
 function normalizeText(value?: string | null): string {
-  return (value ?? '').replace(/\s+/g, '').trim();
+  return (value ?? '').normalize('NFKC').replace(/\s+/g, '').trim();
 }
 
 function normalizeComparisonLabel(value?: string | null): string {
@@ -101,6 +133,18 @@ function normalizeComparisonLabel(value?: string | null): string {
     .replace(/）/g, ')')
     .replace(/[()]/g, '');
   return normalizeText(normalized);
+}
+
+function buildBoothCandidates(normalizedBoothName: string): string[] {
+  const candidates = new Set<string>();
+  const booth = normalizeText(normalizedBoothName);
+  if (!booth) {
+    return [];
+  }
+  candidates.add(booth);
+  candidates.add(booth.replace(/^半面/, ''));
+  candidates.add(booth.replace(/^全面/, ''));
+  return [...candidates].filter(value => value.length > 0);
 }
 
 async function clickAvailableComparisonSlot(page: Page, row: Locator, desiredDateIso: string): Promise<void> {
@@ -152,30 +196,31 @@ async function tryClick(link: Locator): Promise<boolean> {
 
 async function scrollComparisonTable(page: Page, direction: 'left' | 'right'): Promise<void> {
   const table = page.locator('.AvailabilityFrames_gridTable');
-await table.waitFor({ state: 'visible' });
+  await table.waitFor({ state: 'visible' });
 
-const scrolled = await table.evaluateHandle((el) => {
-  // el を起点に、横スクロール可能な祖先（含む）を探す
-  const isScrollableX = (x: Element) => {
-    const s = getComputedStyle(x);
-    const overflowX = s.overflowX;
-    const canScroll = (overflowX === 'auto' || overflowX === 'scroll');
-    return canScroll && (x as HTMLElement).scrollWidth > (x as HTMLElement).clientWidth + 1;
-  };
+  const scrolled = await table.evaluateHandle((el) => {
+    // el を起点に、横スクロール可能な祖先（含む）を探す
+    const isScrollableX = (x: Element) => {
+      const s = getComputedStyle(x);
+      const overflowX = s.overflowX;
+      const canScroll = overflowX === 'auto' || overflowX === 'scroll';
+      return canScroll && (x as HTMLElement).scrollWidth > (x as HTMLElement).clientWidth + 1;
+    };
 
-  let cur: Element | null = el;
-  while (cur) {
-    if (isScrollableX(cur)) return cur as HTMLElement;
-    cur = cur.parentElement;
-  }
-  return el as HTMLElement; // fallback
-});
+    let cur: Element | null = el;
+    while (cur) {
+      if (isScrollableX(cur)) return cur as HTMLElement;
+      cur = cur.parentElement;
+    }
+    return el as HTMLElement; // fallback
+  });
 
-await scrolled.evaluate((scroller: HTMLElement) => {
-  scroller.scrollLeft = scroller.scrollWidth;
-});
-
-  
+  await scrolled.evaluate(
+    (scroller: HTMLElement, scrollDirection: 'left' | 'right') => {
+      scroller.scrollLeft = scrollDirection === 'left' ? 0 : scroller.scrollWidth;
+    },
+    direction,
+  );
 }
 
 async function resolveSlotDate(link: Locator): Promise<string | undefined> {

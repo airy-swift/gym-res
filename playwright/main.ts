@@ -184,7 +184,13 @@ export async function main(): Promise<void> {
     await ensureScreenshot();
     await browser?.close();
     await persistLogFile(successEntries, failedEntries, skippedCount, cancelledCount);
-    await sendLineNotification(`${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件`);
+    try {
+      await sendLineNotification(
+        `${process.env.PLAYWRIGHT_GROUP_ID}/${process.env.SERVICE_USER}: 成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件`,
+      );
+    } catch {
+      // LINE通知失敗は本処理結果を失敗扱いにしない
+    }
   }
 }
 
