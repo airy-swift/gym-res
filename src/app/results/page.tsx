@@ -239,8 +239,11 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
 
   const date = hasStatusPrefix ? columns[1] ?? "" : columns[0] ?? "";
   const time = hasStatusPrefix ? columns[2] ?? "" : columns[1] ?? "";
-  const gymName = hasStatusPrefix ? columns[3] ?? "" : columns[2] ?? "";
-  const room = hasStatusPrefix ? columns[4] ?? "" : columns[3] ?? "";
+  const gymNameRaw = hasStatusPrefix ? columns[3] ?? "" : columns[2] ?? "";
+  const roomRaw = hasStatusPrefix ? columns[4] ?? "" : columns[3] ?? "";
+  const shouldSwapRoomAndBooth = isApplicationIdLike(gymNameRaw) && roomRaw.length > 0;
+  const gymName = shouldSwapRoomAndBooth ? roomRaw : gymNameRaw;
+  const room = shouldSwapRoomAndBooth ? gymNameRaw : roomRaw;
 
   return {
     date,
@@ -249,6 +252,10 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
     room,
     sortDateMs: parseJapaneseDateLabel(date),
   };
+}
+
+function isApplicationIdLike(value: string): boolean {
+  return /^\d{8,}-\d+$/.test(value);
 }
 
 function parseJapaneseDateLabel(dateText: string): number | null {

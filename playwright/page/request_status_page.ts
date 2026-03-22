@@ -18,6 +18,39 @@ export const REQUEST_STATUS_FILTERS: RequestStatusFilter[] = [
   { ja: '当選確定', icon: 'lottery_resolved', needScreenshot: true },
 ];
 
+function parseRoomAndBooth(linkTextRaw: string): { room: string; booth: string } {
+  const parts = linkTextRaw
+    .split('/')
+    .map(value => value.trim())
+    .filter(Boolean);
+
+  const left = parts[0] ?? '';
+  const right = parts.slice(1).join(' / ');
+  const leftTokens = left.split(/\s+/).filter(Boolean);
+  const head = leftTokens[0] ?? '';
+  const isApplicationIdLike = /^\d{8,}-\d+$/.test(head);
+
+  if (isApplicationIdLike) {
+    if (leftTokens.length >= 2) {
+      return {
+        room: leftTokens.slice(1).join(' '),
+        booth: right || head,
+      };
+    }
+    if (right) {
+      return {
+        room: right,
+        booth: head,
+      };
+    }
+  }
+
+  return {
+    room: left,
+    booth: right,
+  };
+}
+
 function toDate(source: string | null): Date | null {
   if (!source) return null;
   const date = new Date(source);
@@ -87,10 +120,7 @@ export async function ensureRequestStatusPage(
   for (let index = 0; index < itemsCount; index += 1) {
     const item = listItems.nth(index);
     const linkTextRaw = (await item.locator('a').innerText()).replace(/\s+/g, ' ').trim();
-    const [textSource, detailRaw] = linkTextRaw.split('/');
-    const trimmedTextSource = textSource?.trim() ?? linkTextRaw;
-    const linkText = trimmedTextSource.split(' ')[1] ?? trimmedTextSource;
-    const detail = detailRaw?.trim() ?? '';
+    const parsedLocation = parseRoomAndBooth(linkTextRaw);
 
     const statusIcon = item
       .locator('span.Label.is-status i.material-icons')
@@ -129,7 +159,14 @@ export async function ensureRequestStatusPage(
           .trim()
       : '';
 
-    results.push({ gymName: linkText, room: detail, date: dateLabel, time: timeRange });
+    results.push({
+      // 保存フォーマットは [date, time, gymName, room] のため、ここでは
+      // gymName=room, room=booth の順に詰める。
+      gymName: parsedLocation.room,
+      room: parsedLocation.booth,
+      date: dateLabel,
+      time: timeRange,
+    });
   }
   return results;
 }

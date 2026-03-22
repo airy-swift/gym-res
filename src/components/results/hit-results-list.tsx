@@ -22,7 +22,7 @@ export function HitResultsList({ rows }: HitResultsListProps) {
       new Map(
         rows.map((row) => [
           row.key,
-          `${row.date || "-"}\t${row.time || "-"}\t${row.gymName || "-"}\t${row.room || "-"}`,
+          `${row.date || "-"} ${row.time || "-"} ${row.gymName || "-"} ${row.room || "-"}`,
         ]),
       ),
     [rows],
