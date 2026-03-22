@@ -19,36 +19,66 @@ export const REQUEST_STATUS_FILTERS: RequestStatusFilter[] = [
 ];
 
 function parseRoomAndBooth(linkTextRaw: string): { room: string; booth: string } {
-  const parts = linkTextRaw
-    .split('/')
-    .map(value => value.trim())
-    .filter(Boolean);
+  const locationSource = extractLocationSource(linkTextRaw);
+  const { facility, booth } = splitFacilityAndBooth(locationSource);
+  return {
+    room: facility,
+    booth,
+  };
+}
 
-  const left = parts[0] ?? '';
-  const right = parts.slice(1).join(' / ');
-  const leftTokens = left.split(/\s+/).filter(Boolean);
-  const head = leftTokens[0] ?? '';
-  const isApplicationIdLike = /^\d{8,}-\d+$/.test(head);
+function extractLocationSource(value: string): string {
+  const normalized = normalizeSpaces(value);
+  const locationMatch = normalized.match(/場所[:：]\s*(.+)$/);
+  if (locationMatch?.[1]) {
+    return normalizeSpaces(locationMatch[1]);
+  }
 
-  if (isApplicationIdLike) {
-    if (leftTokens.length >= 2) {
-      return {
-        room: leftTokens.slice(1).join(' '),
-        booth: right || head,
-      };
+  const parts = normalized.split('/').map(normalizeSpaces).filter(Boolean);
+  if (parts.length >= 2) {
+    const [first, ...rest] = parts;
+    if (isApplicationIdLike(first)) {
+      return rest.join(' / ');
     }
-    if (right) {
+  }
+
+  return normalized;
+}
+
+function splitFacilityAndBooth(locationSource: string): { facility: string; booth: string } {
+  const parts = locationSource.split('/').map(normalizeSpaces).filter(Boolean);
+  if (parts.length >= 2) {
+    const [facility, ...rest] = parts;
+    return {
+      facility,
+      booth: rest.join(' / '),
+    };
+  }
+
+  const tokens = locationSource.split(' ').filter(Boolean);
+  if (tokens.length >= 2) {
+    const boothCandidate = tokens[tokens.length - 1] ?? '';
+    if (isBoothLike(boothCandidate)) {
       return {
-        room: right,
-        booth: head,
+        facility: tokens.slice(0, -1).join(' '),
+        booth: boothCandidate,
       };
     }
   }
 
-  return {
-    room: left,
-    booth: right,
-  };
+  return { facility: locationSource, booth: '' };
+}
+
+function normalizeSpaces(value: string): string {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function isApplicationIdLike(value: string): boolean {
+  return /^\d{8,}-\d+$/.test(value);
+}
+
+function isBoothLike(value: string): boolean {
+  return /(体育館|グラウンド|コート|ホール|スタジオ|プール|武道場|会議室|講堂|全面|半面|面)$/.test(value);
 }
 
 function toDate(source: string | null): Date | null {
@@ -101,7 +131,7 @@ export async function ensureRequestStatusPage(
   const listItems = lotteryList.locator('div[role="listitem"].v-list-item');
   try {
     await listItems.first().waitFor({ state: 'attached', timeout: 10_000 });
-  } catch (_error) {
+  } catch {
     logEarlyReturn('Lottery list exists but contains no entries.');
     return [];
   }

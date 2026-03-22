@@ -239,11 +239,9 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
 
   const date = hasStatusPrefix ? columns[1] ?? "" : columns[0] ?? "";
   const time = hasStatusPrefix ? columns[2] ?? "" : columns[1] ?? "";
-  const gymNameRaw = hasStatusPrefix ? columns[3] ?? "" : columns[2] ?? "";
-  const roomRaw = hasStatusPrefix ? columns[4] ?? "" : columns[3] ?? "";
-  const shouldSwapRoomAndBooth = isApplicationIdLike(gymNameRaw) && roomRaw.length > 0;
-  const gymName = shouldSwapRoomAndBooth ? roomRaw : gymNameRaw;
-  const room = shouldSwapRoomAndBooth ? gymNameRaw : roomRaw;
+  const gymNameSource = hasStatusPrefix ? columns[3] ?? "" : columns[2] ?? "";
+  const roomSource = hasStatusPrefix ? columns[4] ?? "" : columns[3] ?? "";
+  const { gymName, room } = normalizeLocationColumns(gymNameSource, roomSource);
 
   return {
     date,
@@ -256,6 +254,86 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
 
 function isApplicationIdLike(value: string): boolean {
   return /^\d{8,}-\d+$/.test(value);
+}
+
+function normalizeLocationColumns(gymNameSource: string, roomSource: string): { gymName: string; room: string } {
+  const normalizedGymName = normalizeSpaces(gymNameSource);
+  const normalizedRoom = normalizeSpaces(roomSource);
+
+  // 旧データ互換: gymName列に受付番号だけが入っているケース
+  if (isApplicationIdLike(normalizedGymName) && normalizedRoom) {
+    return { gymName: normalizedRoom, room: normalizedGymName };
+  }
+
+  let locationSource = extractLocationSource(normalizedGymName);
+  let booth = normalizedRoom;
+  if (booth) {
+    locationSource = stripTrailingBooth(locationSource, booth);
+  } else {
+    const split = splitFacilityAndBooth(locationSource);
+    locationSource = split.facility;
+    booth = split.booth;
+  }
+
+  return {
+    gymName: locationSource || normalizedRoom || normalizedGymName,
+    room: booth,
+  };
+}
+
+function extractLocationSource(value: string): string {
+  const normalized = normalizeSpaces(value);
+  const locationMatch = normalized.match(/場所[:：]\s*(.+)$/);
+  if (locationMatch?.[1]) {
+    return normalizeSpaces(locationMatch[1]);
+  }
+
+  const slashParts = normalized.split("/").map(normalizeSpaces).filter(Boolean);
+  if (slashParts.length >= 2) {
+    const [head, ...rest] = slashParts;
+    if (isApplicationIdLike(head)) {
+      return rest.join(" / ");
+    }
+  }
+
+  return normalized;
+}
+
+function splitFacilityAndBooth(locationSource: string): { facility: string; booth: string } {
+  const slashParts = locationSource.split("/").map(normalizeSpaces).filter(Boolean);
+  if (slashParts.length >= 2) {
+    const [facility, ...rest] = slashParts;
+    return {
+      facility,
+      booth: rest.join(" / "),
+    };
+  }
+
+  const tokens = locationSource.split(" ").filter(Boolean);
+  if (tokens.length >= 2) {
+    const boothCandidate = tokens[tokens.length - 1] ?? "";
+    if (isBoothLike(boothCandidate)) {
+      return {
+        facility: tokens.slice(0, -1).join(" "),
+        booth: boothCandidate,
+      };
+    }
+  }
+
+  return { facility: locationSource, booth: "" };
+}
+
+function stripTrailingBooth(locationSource: string, booth: string): string {
+  const escapedBooth = booth.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return locationSource.replace(new RegExp(`\\s*${escapedBooth}$`), "").trim() || locationSource;
+}
+
+function isBoothLike(value: string): boolean {
+  return /(体育館|グラウンド|コート|ホール|スタジオ|プール|武道場|会議室|講堂|全面|半面|面)$/.test(value);
+}
+
+function normalizeSpaces(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 function parseJapaneseDateLabel(dateText: string): number | null {
