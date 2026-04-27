@@ -3,6 +3,8 @@ export type RepresentativeEntry = {
   room: string;
   date: string;
   time: string;
+  accountName?: string;
+  accountId?: string;
 };
 
 export type Job = {

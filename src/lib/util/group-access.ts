@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { getGroupDocument, type GroupDocument } from "@/lib/firebase";
+import { resolveWebUserIdFromCookie } from "@/lib/auth/web-session";
 
 const UNAUTHORIZED_PATH = "/unauthorized";
+const AUTH_PATH = "/auth";
 
 type GroupAccessOptions = {
   representativeId?: string | null;
+  requireWhitelistedUser?: boolean;
+  nextPath?: string | null;
 };
 
 export async function ensureValidGroupAccess(
@@ -38,5 +42,24 @@ export async function ensureValidGroupAccess(
     }
   }
 
+  if (options?.requireWhitelistedUser) {
+    const uid = await resolveWebUserIdFromCookie();
+    const whiteList = Array.isArray(group.white)
+      ? group.white.filter((value): value is string => typeof value === "string")
+      : [];
+
+    if (!uid || !whiteList.includes(uid)) {
+      redirect(buildAuthRedirectPath(group.id, options.nextPath ?? null));
+    }
+  }
+
   return group;
+}
+
+function buildAuthRedirectPath(groupId: string, nextPath?: string | null): string {
+  const query = new URLSearchParams({ gp: groupId });
+  if (nextPath) {
+    query.set("next", nextPath);
+  }
+  return `${AUTH_PATH}?${query.toString()}`;
 }

@@ -140,6 +140,7 @@ function buildStandardizedHitLines(hits: RepresentativeEntry[], fixed: Represent
 
 function formatHitLine(entry: RepresentativeEntry): string {
   const normalize = (value?: string) => (value ?? '').replace(/\s+/g, ' ').trim() || '-';
+  const normalizeOptional = (value?: string) => (value ?? '').replace(/\s+/g, ' ').trim();
   const normalizeDate = (value?: string) => {
     const normalized = normalize(value);
     const match = normalized.match(/(?:\d{4}年)?\s*(\d{1,2})月\s*(\d{1,2})日/);
@@ -159,6 +160,8 @@ function formatHitLine(entry: RepresentativeEntry): string {
     normalizeTime(entry.time),
     normalize(entry.gymName),
     normalize(entry.room),
+    normalizeOptional(entry.accountName),
+    normalizeOptional(entry.accountId),
   ].join('\t');
 }
 

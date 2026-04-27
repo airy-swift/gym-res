@@ -22,6 +22,7 @@ export type GroupDocumentData = {
   name?: string;
   urls?: string[];
   ids?: string;
+  white?: string[];
   list?: Array<{
     gymName?: string;
     room?: string;

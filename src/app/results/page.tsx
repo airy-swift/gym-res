@@ -41,7 +41,20 @@ const JST_YEAR_MONTH_FORMATTER = new Intl.DateTimeFormat("ja-JP-u-ca-gregory", {
 
 export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const resolvedSearchParams = await searchParams;
-  const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
+  const groupId = resolvedSearchParams?.gp ?? null;
+  const yearMonth = resolvedSearchParams?.ym;
+  const nextQuery = new URLSearchParams();
+  if (groupId) {
+    nextQuery.set("gp", groupId);
+  }
+  if (yearMonth) {
+    nextQuery.set("ym", yearMonth);
+  }
+  const nextPath = nextQuery.size > 0 ? `/results?${nextQuery.toString()}` : "/results";
+  const group = await ensureValidGroupAccess(groupId, {
+    requireWhitelistedUser: true,
+    nextPath,
+  });
 
   const selectedMonth = resolveSelectedMonth(resolvedSearchParams?.ym);
   const previousMonth = shiftMonth(selectedMonth, -1);
@@ -241,6 +254,8 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
   const time = hasStatusPrefix ? columns[2] ?? "" : columns[1] ?? "";
   const gymNameSource = hasStatusPrefix ? columns[3] ?? "" : columns[2] ?? "";
   const roomSource = hasStatusPrefix ? columns[4] ?? "" : columns[3] ?? "";
+  const accountNameSource = hasStatusPrefix ? columns[5] ?? "" : columns[4] ?? "";
+  const accountIdSource = hasStatusPrefix ? columns[6] ?? "" : columns[5] ?? "";
   const { gymName, room } = normalizeLocationColumns(gymNameSource, roomSource);
 
   return {
@@ -248,6 +263,8 @@ function parseHitLine(line: string): Omit<AggregatedHitRow, "key" | "sourceTimes
     time,
     gymName,
     room,
+    accountName: normalizeAccountName(accountNameSource),
+    accountId: normalizeAccountId(accountIdSource),
     sortDateMs: parseJapaneseDateLabel(date),
   };
 }
@@ -334,6 +351,22 @@ function isBoothLike(value: string): boolean {
 
 function normalizeSpaces(value: string): string {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeAccountName(value: string): string {
+  const normalized = normalizeSpaces(value);
+  if (!normalized || normalized === "-") {
+    return "";
+  }
+  return normalized;
+}
+
+function normalizeAccountId(value: string): string {
+  const normalized = normalizeSpaces(value);
+  if (!normalized || normalized === "-") {
+    return "";
+  }
+  return normalized;
 }
 
 function parseJapaneseDateLabel(dateText: string): number | null {

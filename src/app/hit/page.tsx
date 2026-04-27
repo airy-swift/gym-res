@@ -15,10 +15,22 @@ type HitPageProps = {
 
 export default async function HitPage({ searchParams }: HitPageProps) {
   const resolvedSearchParams = await searchParams;
-
-  const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null);
-  const pageTitle = group.name ?? "サークル";
+  const groupId = resolvedSearchParams?.gp ?? null;
   const representativeId = resolvedSearchParams?.wl ?? null;
+  const nextQuery = new URLSearchParams();
+  if (groupId) {
+    nextQuery.set("gp", groupId);
+  }
+  if (representativeId) {
+    nextQuery.set("wl", representativeId);
+  }
+  const nextPath = nextQuery.size > 0 ? `/hit?${nextQuery.toString()}` : "/hit";
+
+  const group = await ensureValidGroupAccess(groupId, {
+    requireWhitelistedUser: true,
+    nextPath,
+  });
+  const pageTitle = group.name ?? "サークル";
   const query = new URLSearchParams({ gp: group.id });
 
   if (representativeId) {

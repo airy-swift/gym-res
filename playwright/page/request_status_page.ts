@@ -5,6 +5,29 @@ import type { RepresentativeEntry } from '../types';
 const REQUEST_STATUS_URL =
   'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/';
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const ACCOUNT_NAME_CANDIDATES: { selector: string; allowPlainText: boolean }[] = [
+  { selector: 'div.SideNav_pocket div.mb-2', allowPlainText: false },
+  { selector: 'div.SideNav_pocket span.font-weight-bold:nth-of-type(2)', allowPlainText: true },
+  { selector: 'div.SideNav_pocket span.font-weight-bold', allowPlainText: true },
+  { selector: 'div.SideNav_pocket', allowPlainText: false },
+];
+const ACCOUNT_NAME_BLOCKLIST = new Set([
+  'メニュー',
+  'ホーム',
+  '施設一覧・検索',
+  'お知らせ',
+  '申込状況',
+  'お気に入り',
+  'メッセージ',
+  'アカウント設定',
+  'ログアウト',
+  'ヘルプ',
+  'サイトマップ',
+  '規約と方針',
+  'お問い合わせ',
+  '特定商取引法に基づく表示',
+  '閉じる',
+]);
 
 export type RequestStatusFilter = {
   ja: string;
@@ -98,6 +121,76 @@ function formatDateLabel(dateValue: Date | null): string {
   return `${year}年${month}月${day}日(${weekday})`;
 }
 
+function normalizeAccountName(value: string): string {
+  return value
+    .replace(/ログイン中/g, '')
+    .replace(/さん/g, '')
+    .replace(/[：:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function pickAccountNameFromText(source: string, allowPlainText = false): string {
+  const normalized = source.replace(/\s+/g, ' ').trim();
+  if (!normalized) {
+    return '';
+  }
+
+  const loginMatch = normalized.match(/ログイン中\s*([^\s]+(?:\s+[^\s]+)*)\s*さん?/);
+  if (loginMatch?.[1]) {
+    return normalizeAccountName(loginMatch[1] ?? '');
+  }
+
+  const honorificMatch = normalized.match(/([^\s]+(?:\s+[^\s]+)*)\s*さん/);
+  if (honorificMatch?.[1]) {
+    return normalizeAccountName(honorificMatch[1] ?? '');
+  }
+
+  if (!allowPlainText) {
+    return '';
+  }
+
+  const plainName = normalizeAccountName(normalized);
+  if (!plainName || ACCOUNT_NAME_BLOCKLIST.has(plainName)) {
+    return '';
+  }
+  return plainName;
+}
+
+async function resolveAccountName(page: Page): Promise<string> {
+  for (const candidate of ACCOUNT_NAME_CANDIDATES) {
+    const locator = page.locator(candidate.selector);
+    const count = await locator.count();
+    if (count === 0) {
+      continue;
+    }
+
+    for (let index = 0; index < count; index += 1) {
+      const text = normalizeSpaces(await locator.nth(index).innerText());
+      const accountName = pickAccountNameFromText(text, candidate.allowPlainText);
+      if (accountName) {
+        return accountName;
+      }
+    }
+  }
+
+  try {
+    const bodyText = await page.locator('body').innerText();
+    const accountName = pickAccountNameFromText(bodyText);
+    if (accountName) {
+      return accountName;
+    }
+  } catch {
+    // ignore
+  }
+
+  return '';
+}
+
+function resolveAccountId(): string {
+  return (process.env.SERVICE_USER ?? '').trim();
+}
+
 export async function ensureRequestStatusPage(
   page: Page,
   filter: RequestStatusFilter,
@@ -114,6 +207,8 @@ export async function ensureRequestStatusPage(
   await page.getByRole('button', { name: /申込状態：\s*すべての状態/ }).click();
   await page.getByRole('button', { name: filter.ja, exact: true }).click();
   await new Promise(resolve => setTimeout(resolve, 3_000));
+  const accountName = await resolveAccountName(page);
+  const accountId = resolveAccountId();
 
   if (filter.needScreenshot) {
     const screenshotPath = await captureScreenshot(page, 'request-status-page');
@@ -190,12 +285,14 @@ export async function ensureRequestStatusPage(
       : '';
 
     results.push({
-      // 保存フォーマットは [date, time, gymName, room] のため、ここでは
+      // 保存フォーマットは [date, time, gymName, room, accountName, accountId] のため、ここでは
       // gymName=room, room=booth の順に詰める。
       gymName: parsedLocation.room,
       room: parsedLocation.booth,
       date: dateLabel,
       time: timeRange,
+      accountName,
+      accountId,
     });
   }
   return results;
