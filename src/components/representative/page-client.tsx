@@ -664,7 +664,28 @@ function normalizeTimeRange(raw: string | undefined): number | null {
   return hours * 60 + minutes;
 }
 
-function extractTextFromGeminiResponse(payload: any): string | null {
+type GeminiResponsePayload = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: unknown;
+      }>;
+    };
+  }>;
+};
+
+type GeminiEntryPayload = {
+  gymName?: unknown;
+  gym_name?: unknown;
+  room?: unknown;
+  Room?: unknown;
+  date?: unknown;
+  Date?: unknown;
+  time?: unknown;
+  Time?: unknown;
+};
+
+function extractTextFromGeminiResponse(payload: GeminiResponsePayload | null | undefined): string | null {
   if (!payload?.candidates || !Array.isArray(payload.candidates)) {
     return null;
   }
@@ -676,7 +697,7 @@ function extractTextFromGeminiResponse(payload: any): string | null {
   }
 
   return parts
-    .map((part: any) => part?.text || "")
+    .map((part) => (typeof part?.text === "string" ? part.text : ""))
     .filter((text: string) => text.length > 0)
     .join("\n")
     .trim()
@@ -702,8 +723,8 @@ function parseEntriesFromGeminiText(text: string): RepresentativeEntry[] | null 
 
   const entries = Array.isArray(parsed)
     ? parsed
-    : parsed && typeof parsed === "object" && Array.isArray((parsed as any).entries)
-      ? (parsed as any).entries
+    : parsed && typeof parsed === "object" && "entries" in parsed && Array.isArray(parsed.entries)
+      ? parsed.entries
       : null;
 
   if (!entries) {
@@ -724,12 +745,15 @@ function parseEntriesFromGeminiText(text: string): RepresentativeEntry[] | null 
 
   return entries
     .filter((entry: unknown) => entry && typeof entry === "object")
-    .map((entry: any) => ({
-      gymName: toStringOrEmpty(entry.gymName ?? entry.gym_name),
-      room: toStringOrEmpty(entry.room ?? entry.Room),
-      date: toStringOrEmpty(entry.date ?? entry.Date),
-      time: toStringOrEmpty(entry.time ?? entry.Time),
-    }))
+    .map((entry) => {
+      const normalizedEntry = entry as GeminiEntryPayload;
+      return {
+        gymName: toStringOrEmpty(normalizedEntry.gymName ?? normalizedEntry.gym_name),
+        room: toStringOrEmpty(normalizedEntry.room ?? normalizedEntry.Room),
+        date: toStringOrEmpty(normalizedEntry.date ?? normalizedEntry.Date),
+        time: toStringOrEmpty(normalizedEntry.time ?? normalizedEntry.Time),
+      };
+    })
     .filter((entry: RepresentativeEntry) => entry.gymName || entry.room || entry.date || entry.time);
 }
 

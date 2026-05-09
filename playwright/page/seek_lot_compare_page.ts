@@ -31,7 +31,7 @@ export async function runSeekLotComparePage(
   const selectedUrls = nextMonth
     ? chosenUrlBase.map(url => `${url}${nextMonth}`)
     : chosenUrlBase;
-  for (let url of selectedUrls) {
+  for (const url of selectedUrls) {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await page.waitForURL(url => url.toString().startsWith('https://yoyaku.harp.lg.jp/sapporo/FacilityAvailability/Comparison'), {
       timeout: 10_000,

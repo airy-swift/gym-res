@@ -16,7 +16,7 @@ export async function runSeekLotPage(
     await new Promise(resolve => setTimeout(resolve, 1_000));
     const lotterySlots = page.locator('button.AvailabilityFrameSet_frame_content.is-lot');
     
-    let results: {count: number, entry: RepresentativeEntry}[] = [];
+    const results: {count: number, entry: RepresentativeEntry}[] = [];
 
     const count = await lotterySlots.count();
     for (let i = 0; i < count; i++) {
