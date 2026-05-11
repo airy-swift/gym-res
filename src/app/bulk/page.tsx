@@ -7,7 +7,6 @@ const entryCountOptions = Array.from({ length: 20 }, (_, index) => index + 1);
 
 type BulkPageSearchParams = {
   gp?: string;
-  wl?: string;
 };
 
 type BulkPageProps = {
@@ -23,12 +22,7 @@ export default async function BulkPage({ searchParams }: BulkPageProps) {
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = entryCountOptions[entryCountOptions.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(representativeCount || 1, maxEntryOption));
-  const representativeId = resolvedSearchParams?.wl ?? null;
   const query = new URLSearchParams({ gp: group.id });
-
-  if (representativeId) {
-    query.set("wl", representativeId);
-  }
 
   const homeHref = `/?${query.toString()}`;
   const representativeHref = `/representative?${query.toString()}`;

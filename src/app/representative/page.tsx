@@ -2,13 +2,16 @@ import { RepresentativePageClient, type RepresentativeEntry } from "@/components
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
 type RepresentativePageProps = {
-  searchParams?: Promise<{ gp?: string; wl?: string }> | { gp?: string; wl?: string };
+  searchParams?: Promise<{ gp?: string }> | { gp?: string };
 };
 
 export default async function RepresentativePage({ searchParams }: RepresentativePageProps) {
   const resolvedSearchParams = await searchParams;
+  const groupId = resolvedSearchParams?.gp ?? null;
+  const nextPath = groupId ? `/representative?gp=${encodeURIComponent(groupId)}` : "/representative";
   const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null, {
-    representativeId: resolvedSearchParams?.wl ?? null,
+    requireWhitelistedUser: true,
+    nextPath,
   });
 
   const initialEntries: RepresentativeEntry[] = Array.isArray(group.list)

@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 
 import { getGroupDocument, type GroupDocument } from "@/lib/firebase";
 import { resolveWebUserIdFromCookie } from "@/lib/auth/web-session";
+import { isGroupUserEnabled } from "@/lib/auth/group-white-list";
 
 const UNAUTHORIZED_PATH = "/unauthorized";
 const AUTH_PATH = "/auth";
 
 type GroupAccessOptions = {
-  representativeId?: string | null;
   requireWhitelistedUser?: boolean;
   nextPath?: string | null;
 };
@@ -26,29 +26,10 @@ export async function ensureValidGroupAccess(
     redirect(UNAUTHORIZED_PATH);
   }
 
-  const shouldValidateRepresentative = options ? "representativeId" in options : false;
-
-  if (shouldValidateRepresentative) {
-    const representativeId = options?.representativeId;
-
-    if (!representativeId) {
-      redirect(UNAUTHORIZED_PATH);
-    }
-
-    const representatives = Array.isArray(group.representatives) ? group.representatives : [];
-
-    if (!representatives.includes(representativeId)) {
-      redirect(UNAUTHORIZED_PATH);
-    }
-  }
-
   if (options?.requireWhitelistedUser) {
     const uid = await resolveWebUserIdFromCookie();
-    const whiteList = Array.isArray(group.white)
-      ? group.white.filter((value): value is string => typeof value === "string")
-      : [];
 
-    if (!uid || !whiteList.includes(uid)) {
+    if (!uid || !isGroupUserEnabled(group.white, uid)) {
       redirect(buildAuthRedirectPath(group.id, options.nextPath ?? null));
     }
   }

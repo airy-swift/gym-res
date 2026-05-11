@@ -6,7 +6,6 @@ import { ensureValidGroupAccess } from "@/lib/util/group-access";
 
 type HitPageSearchParams = {
   gp?: string;
-  wl?: string;
 };
 
 type HitPageProps = {
@@ -16,13 +15,9 @@ type HitPageProps = {
 export default async function HitPage({ searchParams }: HitPageProps) {
   const resolvedSearchParams = await searchParams;
   const groupId = resolvedSearchParams?.gp ?? null;
-  const representativeId = resolvedSearchParams?.wl ?? null;
   const nextQuery = new URLSearchParams();
   if (groupId) {
     nextQuery.set("gp", groupId);
-  }
-  if (representativeId) {
-    nextQuery.set("wl", representativeId);
   }
   const nextPath = nextQuery.size > 0 ? `/hit?${nextQuery.toString()}` : "/hit";
 
@@ -33,13 +28,7 @@ export default async function HitPage({ searchParams }: HitPageProps) {
   const pageTitle = group.name ?? "サークル";
   const query = new URLSearchParams({ gp: group.id });
 
-  if (representativeId) {
-    query.set("wl", representativeId);
-  }
-
   const homeHref = `/?${query.toString()}`;
-  const representativeHref = `/representative?${query.toString()}`;
-  const bulkHref = `/bulk?${query.toString()}`;
   const initialIds = decodeGroupIdsForDisplay(group.ids);
 
   return (

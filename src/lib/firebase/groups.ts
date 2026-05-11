@@ -1,13 +1,12 @@
-import { doc, getDoc, type DocumentData } from "firebase/firestore";
+import type { DocumentData } from "firebase/firestore";
 
-import { getFirestoreDb } from "./app";
+import type { GroupWhiteEntry } from "@/lib/auth/group-white-list";
+import { getFirestoreRestDocument } from "@/lib/firebase/firestore-rest";
 
 export async function doesFirestoreDocExist(collectionPath: string, documentId: string): Promise<boolean> {
   try {
-    const db = getFirestoreDb();
-    const documentRef = doc(db, collectionPath, documentId);
-    const snapshot = await getDoc(documentRef);
-    return snapshot.exists();
+    const document = await getFirestoreRestDocument(`${collectionPath}/${documentId}`);
+    return document !== null;
   } catch (error) {
     console.error("Failed to check Firestore document", error);
     return false;
@@ -22,7 +21,7 @@ export type GroupDocumentData = {
   name?: string;
   urls?: string[];
   ids?: string;
-  white?: string[];
+  white?: Array<GroupWhiteEntry | string>;
   list?: Array<{
     gymName?: string;
     room?: string;
@@ -38,17 +37,15 @@ export type GroupDocument = GroupDocumentData & {
 
 export async function getGroupDocument(groupId: string): Promise<GroupDocument | null> {
   try {
-    const db = getFirestoreDb();
-    const snapshot = await getDoc(doc(db, "groups", groupId));
-
-    if (!snapshot.exists()) {
+    const document = await getFirestoreRestDocument(`groups/${groupId}`);
+    if (!document) {
       return null;
     }
 
-    const data = snapshot.data() as GroupDocumentData | undefined;
+    const data = document.data as GroupDocumentData | undefined;
 
     return {
-      id: snapshot.id,
+      id: document.id,
       ...(data ?? {}),
     };
   } catch (error) {

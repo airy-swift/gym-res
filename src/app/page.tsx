@@ -7,7 +7,6 @@ const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
 
 type HomePageSearchParams = {
   gp?: string;
-  wl?: string;
 };
 
 type HomePageProps = {
@@ -24,12 +23,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
-  const representativeId = resolvedSearchParams?.wl ?? null;
   const query = new URLSearchParams({ gp: group.id });
-
-  if (representativeId) {
-    query.set("wl", representativeId);
-  }
 
   const representativeHref = `/representative?${query.toString()}`;
 
