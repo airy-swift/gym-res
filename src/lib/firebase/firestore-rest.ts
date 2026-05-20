@@ -71,6 +71,23 @@ export async function patchFirestoreRestDocument(
   }
 }
 
+export async function setFirestoreRestDocument(documentPath: string, data: Record<string, unknown>): Promise<void> {
+  const response = await fetch(buildFirestoreDocumentUrl(documentPath), {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields: encodeFirestoreFields(data),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Firestore REST set failed: ${response.status} ${errorText}`);
+  }
+}
+
 function buildFirestoreDocumentUrl(documentPath: string): URL {
   const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID?.trim() ?? "";
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim() ?? "";
@@ -140,6 +157,9 @@ function encodeFirestoreValue(value: unknown): FirestoreValue {
   }
   if (typeof value === "string") {
     return { stringValue: value };
+  }
+  if (value instanceof Date) {
+    return { timestampValue: value.toISOString() };
   }
   if (Array.isArray(value)) {
     return { arrayValue: { values: value.map(encodeFirestoreValue) } };

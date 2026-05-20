@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteField, doc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { randomUUID } from 'node:crypto';
 
-import { getFirestoreDb } from '@/lib/firebase/app';
 import { dispatchJobWorkflow } from '@/lib/github/dispatch';
 import { markJobAsFailed } from '@/lib/api/internal-jobs';
+import { patchFirestoreRestDocument, setFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
 
 export async function POST(request: NextRequest) {
-  const db = getFirestoreDb();
   const jobId = randomUUID().replace(/-/g, '');
   let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
 
@@ -29,10 +27,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await setDoc(doc(db, 'jobs', jobId), {
+    await setFirestoreRestDocument(`jobs/${jobId}`, {
       status: 'pending',
       message: 'Job created',
-      createdAt: serverTimestamp(),
+      createdAt: new Date(),
       progress: '準備！(2分) + 1件あたり30秒程',
       userId,
       password,
@@ -62,8 +60,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const db = getFirestoreDb();
-
   let body: { jobId?: string; status?: string; message?: string };
 
   try {
@@ -80,13 +76,11 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await updateDoc(doc(db, 'jobs', jobId), {
+    await patchFirestoreRestDocument(`jobs/${jobId}`, {
       status,
       message,
-      updatedAt: serverTimestamp(),
-      userId: deleteField(),
-      password: deleteField(),
-    });
+      updatedAt: new Date(),
+    }, ['status', 'message', 'updatedAt', 'userId', 'password']);
 
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {

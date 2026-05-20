@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
-import { getFirestoreDb } from '@/lib/firebase/app';
 import { isAuthorizedRequest } from '@/lib/api/auth';
+import { patchFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const db = getFirestoreDb();
 
   let body: { jobId?: string; progress?: string };
 
@@ -27,10 +24,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await updateDoc(doc(db, 'jobs', jobId), {
+    await patchFirestoreRestDocument(`jobs/${jobId}`, {
       progress: progress.trim(),
-      updatedAt: serverTimestamp(),
-    });
+      updatedAt: new Date(),
+    }, ['progress', 'updatedAt']);
     return NextResponse.json({ jobId, progress: progress.trim() }, { status: 200 });
   } catch (error) {
     console.error('Failed to update job progress', error);

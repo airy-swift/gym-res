@@ -1,15 +1,10 @@
 
-export async function markJobAsFailed(jobId: string, message: string) {
-  const response = await fetch(`/api/internal/jobs`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ jobId, status: 'failed', message }),
-  });
+import { patchFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
 
-  if (!response.ok) {
-    const payload = await response.text();
-    throw new Error(`Internal job update failed: ${response.status} ${response.statusText} ${payload}`);
-  }
+export async function markJobAsFailed(jobId: string, message: string) {
+  await patchFirestoreRestDocument('jobs/' + jobId, {
+    status: 'failed',
+    message,
+    updatedAt: new Date(),
+  }, ['status', 'message', 'updatedAt', 'userId', 'password']);
 }

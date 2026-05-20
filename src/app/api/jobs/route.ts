@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteField, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { randomUUID } from 'node:crypto';
 
-import { getFirestoreDb } from '@/lib/firebase/app';
 import { isAuthorizedRequest } from '@/lib/api/auth';
 import { dispatchJobWorkflow } from '@/lib/github/dispatch';
 import { markJobAsFailed } from '@/lib/api/internal-jobs';
+import {
+  getFirestoreRestDocument,
+  patchFirestoreRestDocument,
+  setFirestoreRestDocument,
+} from '@/lib/firebase/firestore-rest';
 
 const formatHistoryTimestamp = (date: Date): string => {
   const pad = (value: number, length = 2) => value.toString().padStart(length, '0');
@@ -21,7 +24,6 @@ const formatHistoryTimestamp = (date: Date): string => {
 };
 
 export async function POST(request: NextRequest) {
-  const db = getFirestoreDb();
   const jobId = randomUUID().replace(/-/g, '');
   let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
 
@@ -54,10 +56,10 @@ export async function POST(request: NextRequest) {
   // }
 
   try {
-    await setDoc(doc(db, 'jobs', jobId), {
+    await setFirestoreRestDocument(`jobs/${jobId}`, {
       status: 'pending',
       message: 'ボブと太郎が今、一生懸命頑張っています。',
-      createdAt: serverTimestamp(),
+      createdAt: new Date(),
       progress: '準備してます',
       userId,
       password,
@@ -91,7 +93,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getFirestoreDb();
   const jobId = request.nextUrl.searchParams.get('jobId');
 
   if (!jobId) {
@@ -99,13 +100,13 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const snapshot = await getDoc(doc(db, 'jobs', jobId));
+    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
 
-    if (!snapshot.exists()) {
+    if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ jobId, ...snapshot.data() }, { status: 200 });
+    return NextResponse.json({ jobId, ...document.data }, { status: 200 });
   } catch (error) {
     console.error('Failed to fetch job', error);
     return NextResponse.json({ error: 'Failed to fetch job' }, { status: 500 });
@@ -116,8 +117,6 @@ export async function PATCH(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const db = getFirestoreDb();
 
   let body: { jobId?: string; status?: string; message?: string };
 
@@ -142,13 +141,13 @@ export async function PATCH(request: NextRequest) {
   let jobUserId: string | undefined;
 
   try {
-    const snapshot = await getDoc(doc(db, 'jobs', jobId));
+    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
 
-    if (!snapshot.exists()) {
+    if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    const jobData = snapshot.data() as { groupId?: string; userId?: string };
+    const jobData = document.data as { groupId?: string; userId?: string };
     groupId = jobData.groupId;
     jobUserId = jobData.userId;
   } catch (error) {
@@ -161,29 +160,31 @@ export async function PATCH(request: NextRequest) {
   }
 
   const updates: Record<string, unknown> = {
-    updatedAt: serverTimestamp(),
-    userId: deleteField(),
-    password: deleteField(),
+    updatedAt: new Date(),
   };
+  const updateFields = ['updatedAt', 'userId', 'password'];
 
   if (status !== undefined) {
     updates.status = status;
+    updateFields.push('status');
   }
 
   if (message !== undefined) {
     updates.message = message;
+    updateFields.push('message');
   }
 
   try {
-    const jobRef = doc(db, 'jobs', jobId);
     const historyDocId = formatHistoryTimestamp(new Date());
-    const historyDocRef = doc(db, 'groups', groupId, 'history', historyDocId);
     const historyDocData: Record<string, unknown> = {
       userId: jobUserId,
       message: message ?? null,
     };
 
-    await Promise.all([updateDoc(jobRef, updates), setDoc(historyDocRef, historyDocData)]);
+    await Promise.all([
+      patchFirestoreRestDocument(`jobs/${jobId}`, updates, updateFields),
+      setFirestoreRestDocument(`groups/${groupId}/history/${historyDocId}`, historyDocData),
+    ]);
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {
     console.error('Failed to update job', error);

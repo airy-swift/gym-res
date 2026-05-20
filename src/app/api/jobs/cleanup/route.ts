@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { deleteField, doc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
-import { getFirestoreDb } from '@/lib/firebase/app';
+import { getFirestoreRestDocument, patchFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const db = getFirestoreDb();
   let body: { jobId?: string };
 
   try {
@@ -26,18 +24,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const jobRef = doc(db, 'jobs', jobId);
-    const snapshot = await getDoc(jobRef);
+    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
 
-    if (!snapshot.exists()) {
+    if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    await updateDoc(jobRef, {
-      updatedAt: serverTimestamp(),
-      userId: deleteField(),
-      password: deleteField(),
-    });
+    await patchFirestoreRestDocument(`jobs/${jobId}`, { updatedAt: new Date() }, ['updatedAt', 'userId', 'password']);
 
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {
