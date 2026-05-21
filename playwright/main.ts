@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 
-import { captureScreenshot, cleanupJobCredentials, fetchJob, fetchRepresentativeEntries, logEarlyReturn, updateJobProgress } from './util';
+import { captureScreenshot, cleanupJobCredentials, fetchJob, fetchRepresentativeEntries, logEarlyReturn, logPhase, updateJobProgress } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
@@ -62,6 +62,7 @@ export async function main(): Promise<void> {
   };
 
   try {
+    logPhase('setup', 'Launching browser.');
     browser = await chromium.launch({ headless: HEADLESS });
     const context = await browser.newContext({
       locale: 'ja-JP',
@@ -69,27 +70,39 @@ export async function main(): Promise<void> {
       viewport: { width: 3000, height: 1080 },
     });
     page = await context.newPage();
+    logPhase('setup', 'Browser page created.');
 
+    logPhase('job', 'Fetching job metadata.');
     const job = await fetchJob();
     const jobEntryCount = job?.entryCount ?? null;
     if (jobEntryCount !== null) {
       expectedEntryTotal = jobEntryCount;
+      logPhase('job', `Expected entry count: ${jobEntryCount}`);
+    } else {
+      logPhase('job', 'Expected entry count is not available.');
     }
 
+    logPhase('login', `Navigating to initial page: ${CANCEL_URL}`);
     await page.goto(CANCEL_URL, { waitUntil: 'domcontentloaded' });
     await runLoginPage(page);
+    logPhase('login', 'Cleaning up job credentials after login attempt.');
     await cleanupJobCredentials();
     await new Promise((resolve) => setTimeout(resolve, 1_000));
 
     // 代表が予約して欲しい枠
+    logPhase('representative', 'Fetching representative entries.');
     let representativeEntries = await fetchRepresentativeEntries();
+    logPhase('representative', `Fetched representative entries: ${representativeEntries.length}`);
     if (jobEntryCount !== null) {
       if (jobEntryCount - representativeEntries.length > 0) {
+        logPhase('representative', `Seeking additional entries: ${jobEntryCount - representativeEntries.length}`);
         await updateJobProgress(`追加分の探索中...`);
         const additionalEntries = await runSeekLotComparePage(page, jobEntryCount - representativeEntries.length);
         representativeEntries = [...representativeEntries, ...additionalEntries];
+        logPhase('representative', `Additional entries found: ${additionalEntries.length}`);
       } else {
         representativeEntries = representativeEntries.slice(0, jobEntryCount);
+        logPhase('representative', `Representative entries trimmed to job count: ${representativeEntries.length}`);
       }
       console.log('応募先の枠: ', representativeEntries);
     }
@@ -101,8 +114,10 @@ export async function main(): Promise<void> {
     await updateJobProgress(`${0}/${totalEntries}件`);
 
     // 今のアカウントが既に応募済みの枠
+    logPhase('request-status', 'Fetching already requested entries.');
     await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
     const requestStatusEntries = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[1]);
+    logPhase('request-status', `Already requested entries: ${requestStatusEntries.length}`);
 
     const pendingEntries = representativeEntries.filter(entry => {
       const normalizedEntry = normalizeEntry(entry);
@@ -123,23 +138,32 @@ export async function main(): Promise<void> {
     });
 
     let processedCount = skippedCount;
+    logPhase('reservation', `Pending entries: ${pendingEntries.length}; skipped entries: ${skippedCount}`);
     await updateJobProgress(`${Math.min(processedCount, totalEntries)}/${totalEntries}件`);
 
     for (let index = 0; index < pendingEntries.length; index += 1) {
       const entry = pendingEntries[index];
-      logEarlyReturn(`Processing representative entry: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
+      logPhase('reservation', `Processing representative entry ${index + 1}/${pendingEntries.length}: ${entry.gymName} / ${entry.room} / ${entry.date} ${entry.time}`);
 
       try {
+        logPhase('reservation', 'Running search page.');
         await runSearchPage(page, entry);
+        logPhase('reservation', 'Running facility search page.');
         await runFacilitySearchPage(page, entry.room);
+        logPhase('reservation', 'Running availability comparison page.');
         await runFacilityAvailabilityComparisonPage(page, entry);
+        logPhase('reservation', 'Running facility availability page.');
         await runFacilityAvailabilityPage(page, entry);
+        logPhase('reservation', 'Running lot request page.');
         await runLotRequestPage(page, requestStatusEntries);
+        logPhase('reservation', 'Running confirmation page.');
         const confirmed = await runConfirmationPage(page);
         if (confirmed) {
           successEntries.push(entry);
+          logPhase('reservation', `Entry succeeded: ${formatEntry(entry)}`);
         } else {
           failedEntries.push(entry);
+          logPhase('reservation', `Entry not confirmed: ${formatEntry(entry)}`);
         }
       } catch (entryError) {
         failedEntries.push(entry);
@@ -159,6 +183,7 @@ export async function main(): Promise<void> {
     }
 
     syncResultCounts();
+    logPhase('summary', `Result counts success=${successEntries.length}, failed=${failedEntries.length}, skipped=${skippedCount}, cancelled=${cancelledCount}`);
     if (successEntries.length > 0 || failedEntries.length > 0 || cancelledCount > 0) {
       console.log('Reservation results summary');
       successEntries.forEach(entry => {
@@ -175,8 +200,9 @@ export async function main(): Promise<void> {
   } catch (error) {
     syncResultCounts();
     await ensureScreenshot();
-    logEarlyReturn(
-      `Login flow failed: ${error instanceof Error ? error.message : String(error)}`,
+    logPhase(
+      'fatal',
+      `Reservation flow failed: ${error instanceof Error ? error.message : String(error)}`,
     );
     throw error;
   } finally {

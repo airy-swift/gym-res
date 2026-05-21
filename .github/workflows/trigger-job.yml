@@ -11,6 +11,9 @@ on:
 
 run-name: ${{ inputs.title }}
 
+permissions:
+  contents: write
+
 
 jobs:
   process-job:
@@ -124,7 +127,7 @@ jobs:
             echo 'No screenshot changes to commit.'
             git reset HEAD --quiet
           else
-            git commit -m "Add debug screenshot for job $JOB_ID (run $GITHUB_RUN_ID)"
+            git commit -m "debug: デバッグスクリーンショットを追加 job $JOB_ID run $GITHUB_RUN_ID"
             git push origin "$JOB_BRANCH"
           fi
 

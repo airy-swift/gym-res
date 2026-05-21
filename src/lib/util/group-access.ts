@@ -3,9 +3,9 @@ import { redirect } from "next/navigation";
 import { getGroupDocument, type GroupDocument } from "@/lib/firebase";
 import { resolveWebUserIdFromCookie } from "@/lib/auth/web-session";
 import { isGroupUserEnabled } from "@/lib/auth/group-white-list";
+import { buildAuthPath } from "@/lib/navigation/group-paths";
 
 const UNAUTHORIZED_PATH = "/unauthorized";
-const AUTH_PATH = "/auth";
 
 type GroupAccessOptions = {
   requireWhitelistedUser?: boolean;
@@ -30,17 +30,9 @@ export async function ensureValidGroupAccess(
     const uid = await resolveWebUserIdFromCookie();
 
     if (!uid || !isGroupUserEnabled(group.white, uid)) {
-      redirect(buildAuthRedirectPath(group.id, options.nextPath ?? null));
+      redirect(buildAuthPath(group.id, options.nextPath ?? null));
     }
   }
 
   return group;
-}
-
-function buildAuthRedirectPath(groupId: string, nextPath?: string | null): string {
-  const query = new URLSearchParams({ gp: groupId });
-  if (nextPath) {
-    query.set("next", nextPath);
-  }
-  return `${AUTH_PATH}?${query.toString()}`;
 }

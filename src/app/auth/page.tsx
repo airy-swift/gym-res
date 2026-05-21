@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { GoogleLoginButton } from "@/components/auth/google-login-button";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { buildAuthPath, resolveAuthNextPath } from "@/lib/navigation/group-paths";
 
 type AuthPageSearchParams = {
   gp?: string;
@@ -18,15 +19,10 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
   const group = await ensureValidGroupAccess(groupId);
 
   const rawNext = typeof resolvedSearchParams?.next === "string" ? resolvedSearchParams.next : "";
-  const nextPath = rawNext.startsWith("/") ? rawNext : `/?gp=${group.id}`;
+  const nextPath = resolveAuthNextPath(rawNext, group.id);
 
-  if (groupId) {
-    const query = new URLSearchParams();
-    query.set("gp", groupId);
-    query.set("next", nextPath);
-    if (rawNext && !rawNext.startsWith("/")) {
-      redirect(`/auth?${query.toString()}`);
-    }
+  if (groupId && rawNext && rawNext !== nextPath) {
+    redirect(buildAuthPath(groupId, nextPath));
   }
 
   return (

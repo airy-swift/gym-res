@@ -6,6 +6,7 @@ import { addMonths, formatMonthLabel, getTodayInJst } from "@/lib/date/jst";
 import { HitResultsList, type HitResultRowItem } from "@/components/results/hit-results-list";
 import { ResultsImageGallery } from "@/components/results/image-gallery";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 type ResultsPageSearchParams = {
   gp?: string;
@@ -43,14 +44,9 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const resolvedSearchParams = await searchParams;
   const groupId = resolvedSearchParams?.gp ?? null;
   const yearMonth = resolvedSearchParams?.ym;
-  const nextQuery = new URLSearchParams();
-  if (groupId) {
-    nextQuery.set("gp", groupId);
-  }
-  if (yearMonth) {
-    nextQuery.set("ym", yearMonth);
-  }
-  const nextPath = nextQuery.size > 0 ? `/results?${nextQuery.toString()}` : "/results";
+  const nextPath = groupId
+    ? buildGroupPath("/results", groupId, { params: { ym: yearMonth } })
+    : "/results";
   const group = await ensureValidGroupAccess(groupId, {
     requireWhitelistedUser: true,
     nextPath,
@@ -69,8 +65,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
     yearMonth: toYearMonthKey(nextMonth),
   });
 
-  const query = new URLSearchParams({ gp: group.id });
-  const homeHref = `/?${query.toString()}`;
+  const homeHref = buildGroupPath("/", group.id);
 
   const allImageGroups = await getAllApplicationImageGroups(group.id);
   const imageGroups = filterGroupsByMonth(allImageGroups, selectedMonth);
@@ -553,9 +548,5 @@ function buildResultsHref(params: {
   groupId: string;
   yearMonth: string;
 }): string {
-  const query = new URLSearchParams({
-    gp: params.groupId,
-    ym: params.yearMonth,
-  });
-  return `/results?${query.toString()}`;
+  return buildGroupPath("/results", params.groupId, { params: { ym: params.yearMonth } });
 }

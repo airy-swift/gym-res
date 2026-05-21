@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   GoogleAuthProvider,
   getRedirectResult,
@@ -14,12 +15,13 @@ import { getFirebaseAuth } from "@/lib/firebase/app";
 
 type GoogleLoginButtonProps = {
   groupId: string;
-  nextPath?: string;
+  nextPath: string;
 };
 
 type AccessStatus = "checking" | "full" | "pending" | null;
 
-export function GoogleLoginButton({ groupId }: GoogleLoginButtonProps) {
+export function GoogleLoginButton({ groupId, nextPath }: GoogleLoginButtonProps) {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -47,7 +49,10 @@ export function GoogleLoginButton({ groupId }: GoogleLoginButtonProps) {
 
     setCurrentUser(user);
     setAccessStatus(payload.authorized ? "full" : "pending");
-  }, [groupId]);
+    if (payload.authorized) {
+      router.replace(nextPath);
+    }
+  }, [groupId, nextPath, router]);
 
   useEffect(() => {
     let cancelled = false;

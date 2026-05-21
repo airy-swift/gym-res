@@ -3,6 +3,7 @@ import Link from "next/link";
 import { HitIdsForm } from "@/components/hit/ids-form";
 import { decodeGroupIdsForDisplay } from "@/lib/security/group-ids-crypto";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 type HitPageSearchParams = {
   gp?: string;
@@ -15,20 +16,15 @@ type HitPageProps = {
 export default async function HitPage({ searchParams }: HitPageProps) {
   const resolvedSearchParams = await searchParams;
   const groupId = resolvedSearchParams?.gp ?? null;
-  const nextQuery = new URLSearchParams();
-  if (groupId) {
-    nextQuery.set("gp", groupId);
-  }
-  const nextPath = nextQuery.size > 0 ? `/hit?${nextQuery.toString()}` : "/hit";
+  const nextPath = groupId ? buildGroupPath("/hit", groupId) : "/hit";
 
   const group = await ensureValidGroupAccess(groupId, {
     requireWhitelistedUser: true,
     nextPath,
   });
   const pageTitle = group.name ?? "サークル";
-  const query = new URLSearchParams({ gp: group.id });
 
-  const homeHref = `/?${query.toString()}`;
+  const homeHref = buildGroupPath("/", group.id);
   const initialIds = decodeGroupIdsForDisplay(group.ids);
 
   return (

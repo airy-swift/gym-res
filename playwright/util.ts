@@ -9,6 +9,12 @@ const screenshotCounters: Record<string, number> = {};
 export async function captureScreenshot(page: Page, label: string): Promise<string> {
   const index = screenshotCounters[label] ?? 0;
   screenshotCounters[label] = index + 1;
+  if (label === 'debug') {
+    const path = `${label}${index + 1}.png`;
+    await page.screenshot({ path, fullPage: true, type: 'png' });
+    return path;
+  }
+
   const path = `${label}${index}.jpg`;
   await page.screenshot({ path, fullPage: true, type: 'jpeg', quality: SCREENSHOT_QUALITY });
   return path;
@@ -16,6 +22,10 @@ export async function captureScreenshot(page: Page, label: string): Promise<stri
 
 export function logEarlyReturn(message: string): void {
   console.log(`[pw] ${message}`);
+}
+
+export function logPhase(phase: string, message: string): void {
+  logEarlyReturn(`[${phase}] ${message}`);
 }
 
 export function throwLoggedError(message: string): never {

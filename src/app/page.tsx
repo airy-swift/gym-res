@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { StartJobForm } from "@/components/start-job-form";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
 
@@ -23,9 +24,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
-  const query = new URLSearchParams({ gp: group.id });
 
-  const representativeHref = `/representative?${query.toString()}`;
+  const representativeHref = buildGroupPath("/representative", group.id);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
