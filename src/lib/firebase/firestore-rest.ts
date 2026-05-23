@@ -15,6 +15,11 @@ type FirestoreDocumentResponse = {
   updateTime?: string;
 };
 
+type FirestoreListResponse = {
+  documents?: FirestoreDocumentResponse[];
+  nextPageToken?: string;
+};
+
 export type FirestoreRestDocument = {
   id: string;
   data: Record<string, unknown>;
@@ -43,6 +48,45 @@ export async function getFirestoreRestDocument(documentPath: string): Promise<Fi
     data: decodeFirestoreFields(payload.fields ?? {}),
     updateTime: payload.updateTime,
   };
+}
+
+export async function listFirestoreRestCollection(collectionPath: string): Promise<FirestoreRestDocument[]> {
+  const documents: FirestoreRestDocument[] = [];
+  let pageToken = "";
+
+  do {
+    const url = buildFirestoreDocumentUrl(collectionPath);
+    if (pageToken) {
+      url.searchParams.set("pageToken", pageToken);
+    }
+
+    const response = await fetch(url, {
+      cache: "no-store",
+    });
+
+    if (response.status === 404) {
+      return documents;
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Firestore REST list failed: ${response.status} ${errorText}`);
+    }
+
+    const payload = (await response.json()) as FirestoreListResponse;
+    documents.push(
+      ...(payload.documents ?? [])
+        .map((document) => ({
+          id: document.name?.split("/").pop() ?? "",
+          data: decodeFirestoreFields(document.fields ?? {}),
+          updateTime: document.updateTime,
+        }))
+        .filter((document) => document.id.length > 0),
+    );
+    pageToken = payload.nextPageToken ?? "";
+  } while (pageToken);
+
+  return documents;
 }
 
 export async function patchFirestoreRestDocument(
@@ -85,6 +129,21 @@ export async function setFirestoreRestDocument(documentPath: string, data: Recor
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Firestore REST set failed: ${response.status} ${errorText}`);
+  }
+}
+
+export async function deleteFirestoreRestDocument(documentPath: string): Promise<void> {
+  const response = await fetch(buildFirestoreDocumentUrl(documentPath), {
+    method: "DELETE",
+  });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Firestore REST delete failed: ${response.status} ${errorText}`);
   }
 }
 

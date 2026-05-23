@@ -1,7 +1,8 @@
 import { test } from '@playwright/test';
 import { loadEnv } from '../env';
 import { runLoginPage } from '../page/login_page';
-import { CANCEL_URL } from '../main';
+
+const CANCEL_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=1&p=1&s=10';
 
 loadEnv();
 

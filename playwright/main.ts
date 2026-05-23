@@ -1,21 +1,21 @@
 import { pathToFileURL } from 'node:url';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { chromium, type Browser, type Page } from '@playwright/test';
+import { type Browser, type Page } from '@playwright/test';
 
-import { captureScreenshot, cleanupJobCredentials, fetchJob, fetchRepresentativeEntries, logEarlyReturn, logPhase, updateJobProgress } from './util';
+import { captureScreenshot, cleanupJobCredentials, fetchJob, fetchRepresentativeEntries, logEarlyReturn, logPhase, sendLineNotification, updateJobProgress } from './util';
 import type { RepresentativeEntry } from './types';
 import { runLoginPage } from './page/login_page';
 import { loadEnv } from './env';
-import { LOT_REQUEST_URL, runLotRequestPage } from './page/lot_request_page';
+import { launchChromium } from './browser';
+import { runLotRequestPage } from './page/lot_request_page';
 import { runConfirmationPage } from './page/confirmation_page';
-import { ensureRequestStatusPage, REQUEST_STATUS_FILTERS } from './page/request_status_page';
 import { runSearchPage } from './page/search_page';
 import { runFacilitySearchPage } from './page/facility_search_page';
 import { runFacilityAvailabilityPage } from './page/facility_availability';
 import { runFacilityAvailabilityComparisonPage } from './page/facility_availability_comparison';
-import { runSeekLotComparePage } from './page/seek_lot_compare_page';
-import { sendLineNotification } from './util';
+import { buildReservationPlan } from './reservation_plan';
+import { entriesConflictWithExistingRequest, formatEntryLabel } from './entry_utils';
 
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
@@ -63,7 +63,7 @@ export async function main(): Promise<void> {
 
   try {
     logPhase('setup', 'Launching browser.');
-    browser = await chromium.launch({ headless: HEADLESS });
+    browser = await launchChromium({ headless: HEADLESS });
     const context = await browser.newContext({
       locale: 'ja-JP',
       timezoneId: 'Asia/Tokyo',
@@ -91,53 +91,40 @@ export async function main(): Promise<void> {
 
     // 代表が予約して欲しい枠
     logPhase('representative', 'Fetching representative entries.');
-    let representativeEntries = await fetchRepresentativeEntries();
-    logPhase('representative', `Fetched representative entries: ${representativeEntries.length}`);
-    if (jobEntryCount !== null) {
-      if (jobEntryCount - representativeEntries.length > 0) {
-        logPhase('representative', `Seeking additional entries: ${jobEntryCount - representativeEntries.length}`);
-        await updateJobProgress(`追加分の探索中...`);
-        const additionalEntries = await runSeekLotComparePage(page, jobEntryCount - representativeEntries.length);
-        representativeEntries = [...representativeEntries, ...additionalEntries];
-        logPhase('representative', `Additional entries found: ${additionalEntries.length}`);
-      } else {
-        representativeEntries = representativeEntries.slice(0, jobEntryCount);
-        logPhase('representative', `Representative entries trimmed to job count: ${representativeEntries.length}`);
-      }
-      console.log('応募先の枠: ', representativeEntries);
-    }
+    const requestedRepresentativeEntries = await fetchRepresentativeEntries();
+    logPhase('representative', `Fetched representative entries: ${requestedRepresentativeEntries.length}`);
 
-    totalEntries = representativeEntries.length;
+    const reservationPlan = await buildReservationPlan(page, requestedRepresentativeEntries, jobEntryCount);
+    const representativeEntries = reservationPlan.entries;
+    const requestStatusEntries = reservationPlan.requestStatusEntries;
+    failedEntries.push(...reservationPlan.failedEntries);
+    console.log('応募先の枠: ', representativeEntries);
+
+    totalEntries = reservationPlan.totalEntries;
     if (expectedEntryTotal === null) {
       expectedEntryTotal = totalEntries;
     }
-    await updateJobProgress(`${0}/${totalEntries}件`);
+    await updateJobProgress(`${Math.min(failedEntries.length, totalEntries)}/${totalEntries}件`);
 
-    // 今のアカウントが既に応募済みの枠
-    logPhase('request-status', 'Fetching already requested entries.');
-    await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
-    const requestStatusEntries = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[1]);
-    logPhase('request-status', `Already requested entries: ${requestStatusEntries.length}`);
-
+    const entriesQueuedForThisRun: RepresentativeEntry[] = [];
     const pendingEntries = representativeEntries.filter(entry => {
-      const normalizedEntry = normalizeEntry(entry);
-      const matched = requestStatusEntries.find(requested => {
-        const normalizedRequested = normalizeEntry(requested);
-        return (
-          normalizedRequested.gymName === normalizedEntry.gymName &&
-          normalizedRequested.date === normalizedEntry.date &&
-          normalizedRequested.time === normalizedEntry.time
-        );
-      });
-
-      if (matched) {
+      const alreadyRequested = requestStatusEntries.some(requested => entriesConflictWithExistingRequest(requested, entry));
+      if (alreadyRequested) {
         skippedCount += 1;
         return false;
       }
+
+      const alreadyQueued = entriesQueuedForThisRun.some(queuedEntry => entriesConflictWithExistingRequest(queuedEntry, entry));
+      if (alreadyQueued) {
+        skippedCount += 1;
+        return false;
+      }
+
+      entriesQueuedForThisRun.push(entry);
       return true;
     });
 
-    let processedCount = skippedCount;
+    let processedCount = skippedCount + failedEntries.length;
     logPhase('reservation', `Pending entries: ${pendingEntries.length}; skipped entries: ${skippedCount}`);
     await updateJobProgress(`${Math.min(processedCount, totalEntries)}/${totalEntries}件`);
 
@@ -160,10 +147,10 @@ export async function main(): Promise<void> {
         const confirmed = await runConfirmationPage(page);
         if (confirmed) {
           successEntries.push(entry);
-          logPhase('reservation', `Entry succeeded: ${formatEntry(entry)}`);
+          logPhase('reservation', `Entry succeeded: ${formatEntryLabel(entry)}`);
         } else {
           failedEntries.push(entry);
-          logPhase('reservation', `Entry not confirmed: ${formatEntry(entry)}`);
+          logPhase('reservation', `Entry not confirmed: ${formatEntryLabel(entry)}`);
         }
       } catch (entryError) {
         failedEntries.push(entry);
@@ -187,10 +174,10 @@ export async function main(): Promise<void> {
     if (successEntries.length > 0 || failedEntries.length > 0 || cancelledCount > 0) {
       console.log('Reservation results summary');
       successEntries.forEach(entry => {
-        console.log('SUCCESS', formatEntry(entry));
+        console.log('SUCCESS', formatEntryLabel(entry));
       });
       failedEntries.forEach(entry => {
-        console.log('FAILED', formatEntry(entry));
+        console.log('FAILED', formatEntryLabel(entry));
       });
       console.log(`Skipped entries: ${skippedCount}`);
       if (cancelledCount > 0) {
@@ -220,14 +207,6 @@ export async function main(): Promise<void> {
   }
 }
 
-function formatEntry(entry: RepresentativeEntry): string {
-  const gym = entry.gymName || '施設未指定';
-  const room = entry.room || '部屋未指定';
-  const date = entry.date || '日付未指定';
-  const time = entry.time || '時間未指定';
-  return `${gym} / ${room} / ${date} ${time}`;
-}
-
 function formatSuccessSummary(entry: RepresentativeEntry): string {
   const gym = entry.gymName || '施設未指定';
   const room = entry.room || '部屋未指定';
@@ -235,27 +214,6 @@ function formatSuccessSummary(entry: RepresentativeEntry): string {
   const time = entry.time || '時間未指定';
   return `${date} ${time}に${gym}の${room}を予約しました。`;
 }
-
-function normalizeEntry(entry: RepresentativeEntry): RepresentativeEntry {
-  return {
-    gymName: normalizeText(entry.gymName),
-    room: normalizeText(entry.room),
-    date: normalizeDate(entry.date),
-    time: normalizeText(entry.time),
-  };
-}
-
-const normalizeText = (value?: string | null) => (value ?? '').replace(/\s+/g, '').trim();
-
-function normalizeDate(date: string) {
-  return date
-    .replace(/\s+/g, '')
-    .replace(/（/g, '(')
-    .replace(/）/g, ')')
-    .replace(/年0?/g, '年')
-    .replace(/月0?/g, '月');
-}
-
 
 async function persistLogFile(
   successEntries: RepresentativeEntry[],
@@ -265,7 +223,7 @@ async function persistLogFile(
 ): Promise<void> {
   const summaryLine = `成功${successEntries.length}件 失敗${failedEntries.length}件 スキップ${skippedCount}件 キャンセル${cancelledCount}件`;
   const detailLines = failedEntries.length > 0
-    ? failedEntries.map(entry => `失敗: ${formatEntry(entry)}`)
+    ? failedEntries.map(entry => `失敗: ${formatEntryLabel(entry)}`)
     : successEntries.length > 0
       ? successEntries.map(entry => formatSuccessSummary(entry))
       : ['失敗はありませんでした。'];

@@ -1,16 +1,17 @@
 import { pathToFileURL } from 'node:url';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { chromium, type Browser, type Page } from '@playwright/test';
+import { type Browser, type Page } from '@playwright/test';
 
 import { cleanupJobCredentials, logEarlyReturn, saveApplicationHits, uploadApplicationImage } from './util';
 import { loadEnv } from './env';
 import { runLoginPage } from './page/login_page';
 import type { RepresentativeEntry } from './types';
-import { ensureRequestStatusPage, REQUEST_STATUS_FILTERS } from './page/request_status_page';
+import { ensureRequestStatusPage, REQUEST_STATUS_FILTERS, REQUEST_STATUS_INDEX_URL } from './page/request_status_page';
+import { launchChromium } from './browser';
 
 export const HEADLESS = false;
-export const HIT_STATUS_URL = 'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20';
+export const HIT_STATUS_URL = REQUEST_STATUS_INDEX_URL;
 const REQUEST_STATUS_SCREENSHOT_PREFIX = 'request-status-page';
 
 loadEnv();
@@ -20,7 +21,7 @@ export async function main(): Promise<void> {
   let page: Page | null = null;
 
   try {
-    browser = await chromium.launch({ headless: HEADLESS });
+    browser = await launchChromium({ headless: HEADLESS });
     const context = await browser.newContext({
       locale: 'ja-JP',
       timezoneId: 'Asia/Tokyo',
@@ -34,9 +35,9 @@ export async function main(): Promise<void> {
     await page.waitForTimeout(1_000);
 
     const screenshotPaths: string[] = [];
-    await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
+    await page.goto(HIT_STATUS_URL, { waitUntil: 'domcontentloaded' });
     const hits = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[0], screenshotPaths);
-    await page.goto('https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/Index?t=0&p=1&s=20', { waitUntil: 'domcontentloaded' });
+    await page.goto(HIT_STATUS_URL, { waitUntil: 'domcontentloaded' });
     const fixed = await ensureRequestStatusPage(page, REQUEST_STATUS_FILTERS[2], screenshotPaths);
 
     const timestamp = Date.now().toString();
@@ -70,6 +71,11 @@ async function persistHitSummary(
   }
 
   const lines = buildStandardizedHitLines(hits, fixed);
+  if (lines.length === 0) {
+    logEarlyReturn('No standardized hit lines to save.');
+    return;
+  }
+
   const saved = await saveApplicationHits({ groupId, timestamp, applicationId, hits: lines });
   logEarlyReturn(`Saved standardized hit lines: ${saved ? lines.length : 0}/${lines.length}`);
 }

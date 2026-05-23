@@ -323,9 +323,9 @@ export function RepresentativePageClient({ groupId, groupName, initialEntries = 
                   className="flex items-start justify-between gap-3 rounded-2xl border border-stone-100 bg-white/80 px-4 py-3 shadow-sm"
                 >
                   <div>
-                    <p className="font-semibold text-stone-900">{entry.gymName || "施設名不明"} / {entry.room || "ルーム名不明"}</p>
+                    <p className="font-semibold text-stone-900">{formatEntryDestinationLabel(entry)}</p>
                     <p className="mt-2 text-xs text-stone-600">
-                      {entry.date || "日付不明"} / {entry.time || "時間帯不明"}
+                      {entry.date || "日付不明"} / {entry.time || "時間帯指定なし"}
                     </p>
                   </div>
 
@@ -762,6 +762,17 @@ function formatEntriesForPersistence(entries: RepresentativeEntry[]): Representa
     ...entry,
     room: formatRoomLabel(entry.room),
   }));
+}
+
+function formatEntryDestinationLabel(entry: RepresentativeEntry): string {
+  const gymName = entry.gymName.trim();
+  const room = entry.room.trim();
+
+  if (!gymName && !room && entry.date.trim()) {
+    return "応募先を自動探索";
+  }
+
+  return `${gymName || "施設名不明"} / ${room || "ルーム名不明"}`;
 }
 
 function formatRoomLabel(rawRoom: string | undefined | null): string {

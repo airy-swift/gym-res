@@ -1,10 +1,13 @@
 import type { Page } from '@playwright/test';
 import { captureScreenshot, logEarlyReturn } from '../util';
 import type { RepresentativeEntry } from '../types';
+import { getNextMonthYearMonth } from '../entry_utils';
 
-const REQUEST_STATUS_URL =
+export const REQUEST_STATUS_URL =
   'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/';
+export const REQUEST_STATUS_INDEX_URL = `${REQUEST_STATUS_URL}Index?t=0&p=1&s=20`;
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const JST_TIMEZONE = 'Asia/Tokyo';
 const ACCOUNT_NAME_CANDIDATES: { selector: string; allowPlainText: boolean }[] = [
   { selector: 'div.SideNav_pocket div.mb-2', allowPlainText: false },
   { selector: 'div.SideNav_pocket span.font-weight-bold:nth-of-type(2)', allowPlainText: true },
@@ -28,11 +31,17 @@ const ACCOUNT_NAME_BLOCKLIST = new Set([
   '特定商取引法に基づく表示',
   '閉じる',
 ]);
+const REQUEST_STATUS_URL_WITHOUT_TRAILING_SLASH = REQUEST_STATUS_URL.replace(/\/$/, '');
 
 export type RequestStatusFilter = {
   ja: string;
   icon: string;
   needScreenshot: boolean;
+};
+
+export type RequestStatusPageOptions = {
+  targetYearMonth?: string;
+  captureScreenshots?: boolean;
 };
 
 export const REQUEST_STATUS_FILTERS: RequestStatusFilter[] = [
@@ -195,24 +204,30 @@ export async function ensureRequestStatusPage(
   page: Page,
   filter: RequestStatusFilter,
   screenshotPaths?: string[],
+  options: RequestStatusPageOptions = {},
 ): Promise<RepresentativeEntry[]> {
-  if (!page.url().startsWith(REQUEST_STATUS_URL)) {
-    await page.waitForURL(url => url.toString().startsWith(REQUEST_STATUS_URL), {
-      timeout: 10_000,
-      waitUntil: 'domcontentloaded',
-    });
+  if (!isRequestStatusUrl(page.url())) {
+    await page.goto(REQUEST_STATUS_INDEX_URL, { waitUntil: 'domcontentloaded' });
   } else {
-    await page.waitForLoadState('domcontentloaded');
+    await page.waitForLoadState('domcontentloaded', { timeout: 5_000 }).catch(() => {
+      logEarlyReturn('Request status page did not reach domcontentloaded within 5000ms; continuing with current DOM.');
+    });
   }
-  await page.getByRole('button', { name: /申込状態：\s*すべての状態/ }).click();
+  await page.getByRole('button', { name: /申込状態：/ }).click();
   await page.getByRole('button', { name: filter.ja, exact: true }).click();
   await new Promise(resolve => setTimeout(resolve, 3_000));
   const accountName = await resolveAccountName(page);
   const accountId = resolveAccountId();
 
-  if (filter.needScreenshot) {
-    const screenshotPath = await captureScreenshot(page, 'request-status-page');
-    screenshotPaths?.push(screenshotPath);
+  if (filter.needScreenshot && options.captureScreenshots !== false) {
+    try {
+      const screenshotPath = await captureScreenshot(page, 'request-status-page');
+      screenshotPaths?.push(screenshotPath);
+    } catch (error) {
+      logEarlyReturn(
+        `Failed to capture request status screenshot: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
@@ -237,10 +252,7 @@ export async function ensureRequestStatusPage(
   }
 
   const results: RepresentativeEntry[] = [];
-  const now = new Date();
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const targetYear = nextMonth.getFullYear();
-  const targetMonth = nextMonth.getMonth();
+  const targetMonthCursor = resolveTargetMonth(options.targetYearMonth);
 
   for (let index = 0; index < itemsCount; index += 1) {
     const item = listItems.nth(index);
@@ -267,10 +279,10 @@ export async function ensureRequestStatusPage(
       continue;
     }
 
-    const matchesNextMonth =
-      startDate.getFullYear() === targetYear && startDate.getMonth() === targetMonth;
-    if (!matchesNextMonth) {
-      logEarlyReturn('Skipping entry that is not for next month.');
+    const matchesTargetMonth =
+      startDate.getFullYear() === targetMonthCursor.year && startDate.getMonth() === targetMonthCursor.monthIndex;
+    if (!matchesTargetMonth) {
+      logEarlyReturn(`Skipping entry that is not for target month: ${targetMonthCursor.label}`);
       continue;
     }
 
@@ -296,4 +308,39 @@ export async function ensureRequestStatusPage(
     });
   }
   return results;
+}
+
+function isRequestStatusUrl(url: string): boolean {
+  return url === REQUEST_STATUS_URL_WITHOUT_TRAILING_SLASH || url.startsWith(REQUEST_STATUS_URL);
+}
+
+function resolveTargetMonth(targetYearMonth?: string): { year: number; monthIndex: number; label: string } {
+  const resolvedTargetMonth = parseTargetMonth(targetYearMonth);
+  if (resolvedTargetMonth) {
+    return resolvedTargetMonth;
+  }
+
+  const defaultTargetMonth = parseTargetMonth(getNextMonthYearMonth(JST_TIMEZONE));
+  if (defaultTargetMonth) {
+    return defaultTargetMonth;
+  }
+
+  throw new Error('Failed to resolve request status target month.');
+}
+
+function parseTargetMonth(targetYearMonth?: string): { year: number; monthIndex: number; label: string } | null {
+  const match = targetYearMonth?.match(/^(\d{4})-(\d{2})$/);
+  if (match) {
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    if (Number.isInteger(year) && Number.isInteger(month) && month >= 1 && month <= 12) {
+      return {
+        year,
+        monthIndex: month - 1,
+        label: `${year}-${String(month).padStart(2, '0')}`,
+      };
+    }
+  }
+
+  return null;
 }

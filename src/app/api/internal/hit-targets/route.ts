@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { collection, doc, getDoc, getDocs } from 'firebase/firestore';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
-import { getFirestoreDb } from '@/lib/firebase/app';
+import { getFirestoreRestDocument, listFirestoreRestCollection } from '@/lib/firebase/firestore-rest';
 import { decodeGroupIdsForDisplay } from '@/lib/security/group-ids-crypto';
 
 type HitTarget = {
@@ -67,13 +66,12 @@ function decodeTargetsFromRawIds(groupId: string, rawIds: unknown): HitTarget[] 
 }
 
 async function collectAllHitTargetDescriptors(): Promise<HitTargetDescriptor[]> {
-  const db = getFirestoreDb();
   const descriptors: HitTargetDescriptor[] = [];
-  const groupsSnapshot = await getDocs(collection(db, 'groups'));
+  const groupDocuments = await listFirestoreRestCollection('groups');
 
-  for (const groupDoc of groupsSnapshot.docs) {
-    const groupId = groupDoc.id;
-    const entries = decodeTargetsFromRawIds(groupId, groupDoc.get('ids'));
+  for (const groupDocument of groupDocuments) {
+    const groupId = groupDocument.id;
+    const entries = decodeTargetsFromRawIds(groupId, groupDocument.data.ids);
     for (let rowIndex = 0; rowIndex < entries.length; rowIndex += 1) {
       descriptors.push({ groupId, rowIndex });
     }
@@ -83,24 +81,22 @@ async function collectAllHitTargetDescriptors(): Promise<HitTargetDescriptor[]> 
 }
 
 async function collectHitTargetDescriptorsByGroupId(groupId: string): Promise<HitTargetDescriptor[]> {
-  const db = getFirestoreDb();
-  const snapshot = await getDoc(doc(db, 'groups', groupId));
-  if (!snapshot.exists()) {
+  const document = await getFirestoreRestDocument(`groups/${groupId}`);
+  if (!document) {
     return [];
   }
 
-  const entries = decodeTargetsFromRawIds(groupId, snapshot.get('ids'));
+  const entries = decodeTargetsFromRawIds(groupId, document.data.ids);
   return entries.map((_, rowIndex) => ({ groupId, rowIndex }));
 }
 
 async function resolveGroupTarget(groupId: string, rowIndex: number): Promise<HitTarget | null> {
-  const db = getFirestoreDb();
-  const snapshot = await getDoc(doc(db, 'groups', groupId));
-  if (!snapshot.exists()) {
+  const document = await getFirestoreRestDocument(`groups/${groupId}`);
+  if (!document) {
     return null;
   }
 
-  const entries = decodeTargetsFromRawIds(groupId, snapshot.get('ids'));
+  const entries = decodeTargetsFromRawIds(groupId, document.data.ids);
   return entries[rowIndex] ?? null;
 }
 

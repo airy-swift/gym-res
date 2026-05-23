@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { arrayUnion, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { getStorage, ref, uploadBytes } from "firebase/storage";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
-import { getFirebaseApp, getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
+import { getFirebaseApp, getStorageBucketName } from "@/lib/firebase/app";
+import { getFirestoreRestDocument, patchFirestoreRestDocument } from "@/lib/firebase/firestore-rest";
 import { hasServiceAccountUploadConfig, uploadToStorageWithServiceAccount } from "@/lib/firebase/storage-server-upload";
 
 export const runtime = "nodejs";
@@ -72,18 +72,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = getFirestoreDb();
-    const applicationRef = doc(db, "groups", groupId, "applications", applicationId);
-    const existingDoc = await getDoc(applicationRef);
+    const documentPath = `groups/${groupId}/applications/${applicationId}`;
+    const existingDoc = await getFirestoreRestDocument(documentPath);
+    const existingImages = Array.isArray(existingDoc?.data.images)
+      ? existingDoc.data.images.filter((value): value is string => typeof value === "string" && value.length > 0)
+      : [];
+    const updates: Record<string, unknown> = {
+      images: Array.from(new Set([...existingImages, storagePath])),
+    };
+    const updateFields = ["images"];
 
-    await setDoc(
-      applicationRef,
-      {
-        images: arrayUnion(storagePath),
-        ...(existingDoc.data()?.created_at == null ? { created_at: serverTimestamp() } : {}),
-      },
-      { merge: true },
-    );
+    if (existingDoc?.data.created_at == null) {
+      updates.created_at = new Date();
+      updateFields.push("created_at");
+    }
+
+    await patchFirestoreRestDocument(documentPath, updates, updateFields);
 
     return NextResponse.json({ ok: true, storagePath }, { status: 200 });
   } catch (error) {

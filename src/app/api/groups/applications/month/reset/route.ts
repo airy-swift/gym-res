@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { collection, deleteDoc, getDocs } from "firebase/firestore";
 import { deleteObject, getStorage, ref } from "firebase/storage";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
 import { getTodayInJst } from "@/lib/date/jst";
-import { getFirebaseApp, getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
+import { getFirebaseApp, getStorageBucketName } from "@/lib/firebase/app";
+import { deleteFirestoreRestDocument, listFirestoreRestCollection } from "@/lib/firebase/firestore-rest";
 import {
   deleteFromStorageWithServiceAccount,
   hasServiceAccountUploadConfig,
@@ -51,13 +51,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const db = getFirestoreDb();
-    const snapshot = await getDocs(collection(db, "groups", groupId, "applications"));
-    const docs = snapshot.docs;
+    const docs = await listFirestoreRestCollection(`groups/${groupId}/applications`);
 
     const candidateDocs = docs
       .map((docSnapshot) => {
-        const data = docSnapshot.data() as { created_at?: unknown; images?: unknown } | undefined;
+        const data = docSnapshot.data as { created_at?: unknown; images?: unknown } | undefined;
         const createdAtMs = parseCreatedAtMs(data?.created_at) ?? parseTimestampDocId(docSnapshot.id);
         if (createdAtMs === null) {
           return null;
@@ -71,12 +69,11 @@ export async function POST(request: NextRequest) {
           : [];
 
         return {
-          ref: docSnapshot.ref,
           docId: docSnapshot.id,
           imagePaths: images,
         };
       })
-      .filter((value): value is { ref: (typeof docs)[number]["ref"]; docId: string; imagePaths: string[] } => value !== null);
+      .filter((value): value is { docId: string; imagePaths: string[] } => value !== null);
 
     const requiresImageDelete = candidateDocs.some((docItem) => docItem.imagePaths.length > 0);
     let storageBucket = "";
@@ -136,7 +133,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      await deleteDoc(docItem.ref);
+      await deleteFirestoreRestDocument(`groups/${groupId}/applications/${docItem.docId}`);
       deletedDocs += 1;
     }
 

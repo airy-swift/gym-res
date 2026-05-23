@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { collection, getDocs } from "firebase/firestore";
 
-import { getFirestoreDb, getStorageBucketName } from "@/lib/firebase/app";
+import { getStorageBucketName } from "@/lib/firebase/app";
 import { addMonths, formatMonthLabel, getTodayInJst } from "@/lib/date/jst";
 import { HitResultsList, type HitResultRowItem } from "@/components/results/hit-results-list";
 import { ResultsImageGallery } from "@/components/results/image-gallery";
 import { ensureValidGroupAccess } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
+import { listFirestoreRestCollection } from "@/lib/firebase/firestore-rest";
 
 type ResultsPageSearchParams = {
   gp?: string;
@@ -164,12 +164,11 @@ function resolveStorageBucket(): string {
 async function getAllApplicationImageGroups(
   groupId: string,
 ): Promise<ApplicationImageGroup[]> {
-  const db = getFirestoreDb();
-  const snapshot = await getDocs(collection(db, "groups", groupId, "applications"));
+  const documents = await listFirestoreRestCollection(`groups/${groupId}/applications`);
 
-  const groups = snapshot.docs
+  const groups = documents
     .map((docSnapshot) => {
-      const data = docSnapshot.data() as { hits?: unknown; images?: unknown; created_at?: unknown } | undefined;
+      const data = docSnapshot.data as { hits?: unknown; images?: unknown; created_at?: unknown } | undefined;
       const createdAtMs = parseCreatedAtMs(data?.created_at) ?? parseTimestampDocId(docSnapshot.id);
       if (createdAtMs === null) {
         return null;

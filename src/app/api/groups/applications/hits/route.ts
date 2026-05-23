@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 import { isAuthorizedRequest } from "@/lib/api/auth";
-import { getFirestoreDb } from "@/lib/firebase/app";
+import { getFirestoreRestDocument, patchFirestoreRestDocument } from "@/lib/firebase/firestore-rest";
 
 export const runtime = "nodejs";
 
@@ -59,18 +58,17 @@ export async function POST(request: NextRequest) {
   );
 
   try {
-    const db = getFirestoreDb();
-    const applicationRef = doc(db, "groups", groupId, "applications", applicationId);
-    const existingDoc = await getDoc(applicationRef);
+    const documentPath = `groups/${groupId}/applications/${applicationId}`;
+    const existingDoc = await getFirestoreRestDocument(documentPath);
+    const updates: Record<string, unknown> = { hits };
+    const updateFields = ["hits"];
 
-    await setDoc(
-      applicationRef,
-      {
-        hits,
-        ...(existingDoc.data()?.created_at == null ? { created_at: serverTimestamp() } : {}),
-      },
-      { merge: true },
-    );
+    if (existingDoc?.data.created_at == null) {
+      updates.created_at = new Date();
+      updateFields.push("created_at");
+    }
+
+    await patchFirestoreRestDocument(documentPath, updates, updateFields);
 
     return NextResponse.json({ ok: true, total: hits.length }, { status: 200 });
   } catch (error) {

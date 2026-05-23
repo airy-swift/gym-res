@@ -1,9 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './playwright/tests',
+  testDir: './tests',
   reporter: [
     ['list'],
-    ['json', { outputFile: 'playwright/pw-result.json' }],
+    ['json', { outputFile: 'pw-result.json' }],
   ],
 });

@@ -3,10 +3,12 @@ import type { Page } from '@playwright/test';
 import type { RepresentativeEntry } from '../types';
 import { waitForTutorial } from '../util';
 import JapaneseHolidays from 'japanese-holidays';
+import { entryMatchesSeekFilter, type NormalizedSeekLotFilter } from '../entry_utils';
 
 export async function runSeekLotPage(
   page: Page,
   url: string,
+  filter?: NormalizedSeekLotFilter,
 ): Promise<{count: number, entry: RepresentativeEntry}[] | undefined> {
     await page.waitForURL(url => url.toString().startsWith('https://yoyaku.harp.lg.jp/sapporo/FacilityAvailability/Index'), {timeout: 10_000,});
     await waitForTutorial(page);
@@ -26,11 +28,20 @@ export async function runSeekLotPage(
       const times = slot.locator('time');
       const start = await times.nth(0).getAttribute('datetime');
       const end = await times.nth(1).getAttribute('datetime');
+      if (!start || !end) {
+        console.warn('抽選枠の日時を取得できなかったためスキップします。');
+        continue;
+      }
     
       // start/end 例: "2026-01-04 09:00:00"
-      const date = start!.split(' ')[0];
-      const startTimeRaw = start!.split(' ')[1].slice(0, 5);
-      const endTime = toHourMinute(end!.split(' ')[1].slice(0, 5));
+      const date = start.split(' ')[0];
+      const startTimeRaw = start.split(' ')[1]?.slice(0, 5);
+      const endTimeRaw = end.split(' ')[1]?.slice(0, 5);
+      if (!date || !startTimeRaw || !endTimeRaw) {
+        console.warn('抽選枠の日時形式が不正なためスキップします。');
+        continue;
+      }
+      const endTime = toHourMinute(endTimeRaw);
       const startHour = Number(startTimeRaw.split(':')[0]);
       const jsDate = getDate(date);
       const isHoliday = Boolean(JapaneseHolidays.isHoliday(jsDate, true));
@@ -43,13 +54,26 @@ export async function runSeekLotPage(
 
       const startTime = toHourMinute(startTimeRaw);
       const timeRange = `${startTime}-${endTime}`;
+      const entry = {
+        gymName: '',
+        room: '',
+        date,
+        time: timeRange,
+      } satisfies RepresentativeEntry;
+      if (!entryMatchesSeekFilter(entry, filter)) {
+        continue;
+      }
     
       // --- lottery 数（IconTextContainer_text） ---
       const countText = await slot
         .locator('.IconTextContainer_text')
         .innerText();
     
-      const lotteryCount = Number(countText.trim());
+      const lotteryCount = parseLotteryCount(countText);
+      if (lotteryCount === null) {
+        console.warn(`抽選応募数を数値化できなかったためスキップします: ${countText}`);
+        continue;
+      }
       const gymName = await page.locator('a.h-ctDeep.headline').innerText();
       const roomName = await page.locator('button.SearchForm_simple_condition span.InputContainer').innerText();
       const boothName = await slot.evaluate(el => {
@@ -78,6 +102,15 @@ export async function runSeekLotPage(
     }
     
     return results;
+}
+
+function parseLotteryCount(value: string): number | null {
+  const match = value.trim().match(/\d+/);
+  if (!match) {
+    return null;
+  }
+  const count = Number(match[0]);
+  return Number.isFinite(count) ? count : null;
 }
     
 function toHourMinute(value: string): string {

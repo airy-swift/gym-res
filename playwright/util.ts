@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import https from 'node:https';
 
 import type { Job, RepresentativeEntry } from './types';
+import { normalizeDateToIso } from './entry_utils';
 
 const SCREENSHOT_QUALITY = 60;
 const screenshotCounters: Record<string, number> = {};
@@ -348,14 +349,7 @@ export async function resetApplicationsMonth({
 }
 
 export function deriveUdParam(dateText: string): string | null {
-  const match = dateText.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-  if (!match) {
-    return null;
-  }
-  const [, year, month, day] = match;
-  const formattedMonth = month.padStart(2, '0');
-  const formattedDay = day.padStart(2, '0');
-  return `${year}-${formattedMonth}-${formattedDay}`;
+  return normalizeDateToIso(dateText);
 }
 
 export async function waitForTutorial(page: Page): Promise<void> {
