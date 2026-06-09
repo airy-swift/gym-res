@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { WebSessionBridge } from "@/components/auth/web-session-bridge";
 import { HitIdsForm } from "@/components/hit/ids-form";
 import { decodeGroupIdsForDisplay } from "@/lib/security/group-ids-crypto";
-import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { getGroupAccessState } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 type HitPageSearchParams = {
@@ -18,10 +20,19 @@ export default async function HitPage({ searchParams }: HitPageProps) {
   const groupId = resolvedSearchParams?.gp ?? null;
   const nextPath = groupId ? buildGroupPath("/hit", groupId) : "/hit";
 
-  const group = await ensureValidGroupAccess(groupId, {
+  const accessState = await getGroupAccessState(groupId, {
     requireWhitelistedUser: true,
-    nextPath,
   });
+
+  if (accessState.status === "invalid") {
+    redirect("/unauthorized");
+  }
+
+  if (accessState.status === "auth_required") {
+    return <WebSessionBridge groupId={accessState.group.id} nextPath={nextPath} />;
+  }
+
+  const group = accessState.group;
   const pageTitle = group.name ?? "サークル";
 
   const homeHref = buildGroupPath("/", group.id);

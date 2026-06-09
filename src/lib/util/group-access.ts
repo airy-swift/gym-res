@@ -12,27 +12,51 @@ type GroupAccessOptions = {
   nextPath?: string | null;
 };
 
+export type GroupAccessState =
+  | { status: "authorized"; group: GroupDocument }
+  | { status: "auth_required"; group: GroupDocument }
+  | { status: "invalid" };
+
 export async function ensureValidGroupAccess(
   groupId?: string | null,
   options?: GroupAccessOptions,
 ): Promise<GroupDocument> {
-  if (!groupId) {
+  const accessState = await getGroupAccessState(groupId, options);
+
+  if (accessState.status === "invalid") {
     redirect(UNAUTHORIZED_PATH);
+  }
+
+  if (accessState.status === "auth_required") {
+    redirect(buildAuthPath(accessState.group.id, options?.nextPath ?? null));
+  }
+
+  return accessState.group;
+}
+
+export async function getGroupAccessState(
+  groupId?: string | null,
+  options?: Pick<GroupAccessOptions, "requireWhitelistedUser">,
+): Promise<GroupAccessState> {
+  if (!groupId) {
+    return { status: "invalid" };
   }
 
   const group = await getGroupDocument(groupId);
 
   if (!group) {
-    redirect(UNAUTHORIZED_PATH);
+    return { status: "invalid" };
   }
 
-  if (options?.requireWhitelistedUser) {
-    const uid = await resolveWebUserIdFromCookie();
-
-    if (!uid || !isGroupUserEnabled(group.white, uid)) {
-      redirect(buildAuthPath(group.id, options.nextPath ?? null));
-    }
+  if (!options?.requireWhitelistedUser) {
+    return { status: "authorized", group };
   }
 
-  return group;
+  const uid = await resolveWebUserIdFromCookie();
+
+  if (!uid || !isGroupUserEnabled(group.white, uid)) {
+    return { status: "auth_required", group };
+  }
+
+  return { status: "authorized", group };
 }

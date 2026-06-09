@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
+import { WebSessionBridge } from "@/components/auth/web-session-bridge";
 import { getStorageBucketName } from "@/lib/firebase/app";
 import { addMonths, formatMonthLabel, getTodayInJst } from "@/lib/date/jst";
 import { HitResultsList, type HitResultRowItem } from "@/components/results/hit-results-list";
 import { ResultsImageGallery } from "@/components/results/image-gallery";
-import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { getGroupAccessState } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
 import { listFirestoreRestCollection } from "@/lib/firebase/firestore-rest";
 
@@ -47,10 +49,19 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   const nextPath = groupId
     ? buildGroupPath("/results", groupId, { params: { ym: yearMonth } })
     : "/results";
-  const group = await ensureValidGroupAccess(groupId, {
+  const accessState = await getGroupAccessState(groupId, {
     requireWhitelistedUser: true,
-    nextPath,
   });
+
+  if (accessState.status === "invalid") {
+    redirect("/unauthorized");
+  }
+
+  if (accessState.status === "auth_required") {
+    return <WebSessionBridge groupId={accessState.group.id} nextPath={nextPath} />;
+  }
+
+  const group = accessState.group;
 
   const selectedMonth = resolveSelectedMonth(resolvedSearchParams?.ym);
   const previousMonth = shiftMonth(selectedMonth, -1);

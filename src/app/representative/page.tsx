@@ -1,5 +1,8 @@
+import { redirect } from "next/navigation";
+
+import { WebSessionBridge } from "@/components/auth/web-session-bridge";
 import { RepresentativePageClient, type RepresentativeEntry } from "@/components/representative/page-client";
-import { ensureValidGroupAccess } from "@/lib/util/group-access";
+import { getGroupAccessState } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 type RepresentativePageProps = {
@@ -10,10 +13,19 @@ export default async function RepresentativePage({ searchParams }: Representativ
   const resolvedSearchParams = await searchParams;
   const groupId = resolvedSearchParams?.gp ?? null;
   const nextPath = groupId ? buildGroupPath("/representative", groupId) : "/representative";
-  const group = await ensureValidGroupAccess(resolvedSearchParams?.gp ?? null, {
+  const accessState = await getGroupAccessState(groupId, {
     requireWhitelistedUser: true,
-    nextPath,
   });
+
+  if (accessState.status === "invalid") {
+    redirect("/unauthorized");
+  }
+
+  if (accessState.status === "auth_required") {
+    return <WebSessionBridge groupId={accessState.group.id} nextPath={nextPath} />;
+  }
+
+  const group = accessState.group;
 
   const initialEntries: RepresentativeEntry[] = Array.isArray(group.list)
     ? group.list.map((entry) => ({

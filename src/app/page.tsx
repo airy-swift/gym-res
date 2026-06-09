@@ -5,6 +5,7 @@ import { ensureValidGroupAccess } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
 
 const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
+const DEFAULT_ENTRY_COUNT = 15;
 
 type HomePageSearchParams = {
   gp?: string;
@@ -23,7 +24,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const groupLabel = pageTitle;
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
-  const defaultEntryCount = Math.max(1, Math.min(representativeCount, maxEntryOption));
+  const defaultEntryCount = Math.max(1, Math.min(DEFAULT_ENTRY_COUNT, maxEntryOption));
 
   const representativeHref = buildGroupPath("/representative", group.id);
 
