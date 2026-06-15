@@ -78,7 +78,7 @@ jobs:
       - name: Install Playwright dependencies
         run: |
           set -euo pipefail
-          npm install
+          npm ci
           npx playwright install --with-deps
         working-directory: playwright
 
@@ -131,9 +131,12 @@ jobs:
             git push origin "$JOB_BRANCH"
           fi
 
-      - name: Update job status on failure
-        if: failure()
+      - name: Update job status
+        if: always()
+        env:
+          RESERVATION_OUTCOME: ${{ steps.run_reservation.outcome }}
         run: |
+          set -euo pipefail
           SUMMARY_FILE="job-error-summary.txt"
           if [ ! -f "$SUMMARY_FILE" ]; then
             echo 'No summary available' > "$SUMMARY_FILE"
@@ -141,41 +144,29 @@ jobs:
 
           if [ -f playwright/log.txt ]; then
             MESSAGE=$(cat playwright/log.txt)
-          else
+          elif [ "$RESERVATION_OUTCOME" != "success" ]; then
             MESSAGE=$(printf 'GitHub Actions run %s failed.\n\nLast log lines:\n%s' "$GITHUB_RUN_ID" "$(cat "$SUMMARY_FILE")")
-          fi
-
-          PAYLOAD=$(jq -n \
-            --arg jobId "$JOB_ID" \
-            --arg status "failed" \
-            --arg message "$MESSAGE" \
-            '{jobId: $jobId, status: $status, message: $message}')
-
-          curl -sSf -X PATCH "$API_BASE_URL/api/internal/jobs" \
-            -H 'Content-Type: application/json' \
-            -H "API_TOKEN: $API_TOKEN" \
-            -d "$PAYLOAD"
-
-      - name: Update job status on success
-        if: success()
-        run: |
-          if [ -f playwright/log.txt ]; then
-            MESSAGE=$(cat playwright/log.txt)
           else
-            SUMMARY_FILE="job-error-summary.txt"
-            if [ ! -f "$SUMMARY_FILE" ]; then
-              echo 'No summary available' > "$SUMMARY_FILE"
-            fi
             MESSAGE=$(printf 'GitHub Actions run %s succeeded.\n\nLast log lines:\n%s' "$GITHUB_RUN_ID" "$(cat "$SUMMARY_FILE")")
           fi
 
+          if [ "$RESERVATION_OUTCOME" = "success" ]; then
+            JOB_STATUS="completed"
+          else
+            JOB_STATUS="failed"
+          fi
+
           PAYLOAD=$(jq -n \
             --arg jobId "$JOB_ID" \
-            --arg status "completed" \
+            --arg status "$JOB_STATUS" \
             --arg message "$MESSAGE" \
             '{jobId: $jobId, status: $status, message: $message}')
 
-          curl -sSf -X PATCH "$API_BASE_URL/api/internal/jobs" \
+          curl -sSf -X PATCH "${API_BASE_URL%/}/api/internal/jobs" \
             -H 'Content-Type: application/json' \
             -H "API_TOKEN: $API_TOKEN" \
             -d "$PAYLOAD"
+
+      - name: Fail workflow when reservation failed
+        if: steps.run_reservation.outcome == 'failure'
+        run: exit 1

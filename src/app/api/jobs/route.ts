@@ -1,30 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
-import { dispatchJobWorkflow } from '@/lib/github/dispatch';
-import { markJobAsFailed } from '@/lib/api/internal-jobs';
 import {
-  getFirestoreRestDocument,
-  patchFirestoreRestDocument,
+  createDispatchedJob,
+  formatHistoryTimestamp,
+  getJobDocument,
+  patchJobDocument,
+} from '@/lib/api/job-store';
+import {
   setFirestoreRestDocument,
 } from '@/lib/firebase/firestore-rest';
 
-const formatHistoryTimestamp = (date: Date): string => {
-  const pad = (value: number, length = 2) => value.toString().padStart(length, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
-  const milliseconds = pad(date.getMilliseconds(), 3);
-
-  return `${year}-${month}-${day}-${hours}:${minutes}:${seconds}.${milliseconds}`;
-};
-
 export async function POST(request: NextRequest) {
-  const jobId = randomUUID().replace(/-/g, '');
   let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
 
   try {
@@ -56,30 +43,15 @@ export async function POST(request: NextRequest) {
   // }
 
   try {
-    await setFirestoreRestDocument(`jobs/${jobId}`, {
-      status: 'pending',
-      message: 'ボブと太郎が今、一生懸命頑張っています。',
-      createdAt: new Date(),
-      progress: '準備してます',
+    const jobId = await createDispatchedJob({
       userId,
       password,
       entryCount,
       groupId,
+      label,
+      message: 'ボブと太郎が今、一生懸命頑張っています。',
+      progress: '準備してます',
     });
-
-    try {
-      await dispatchJobWorkflow(jobId, label);
-    } catch (dispatchError) {
-      console.error('GitHub Actions dispatch failed', dispatchError);
-
-      try {
-        await markJobAsFailed(jobId, 'GitHub Actions dispatch failed');
-      } catch (updateError) {
-        console.error('Failed to mark job as failed after dispatch error', updateError);
-      }
-
-      throw dispatchError;
-    }
 
     return NextResponse.json({ jobId }, { status: 201 });
   } catch (error) {
@@ -100,7 +72,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
+    const document = await getJobDocument(jobId);
 
     if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
@@ -141,7 +113,7 @@ export async function PATCH(request: NextRequest) {
   let jobUserId: string | undefined;
 
   try {
-    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
+    const document = await getJobDocument(jobId);
 
     if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
@@ -159,21 +131,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: 'Job is missing groupId or userId' }, { status: 400 });
   }
 
-  const updates: Record<string, unknown> = {
-    updatedAt: new Date(),
-  };
-  const updateFields = ['updatedAt', 'userId', 'password'];
-
-  if (status !== undefined) {
-    updates.status = status;
-    updateFields.push('status');
-  }
-
-  if (message !== undefined) {
-    updates.message = message;
-    updateFields.push('message');
-  }
-
   try {
     const historyDocId = formatHistoryTimestamp(new Date());
     const historyDocData: Record<string, unknown> = {
@@ -182,7 +139,7 @@ export async function PATCH(request: NextRequest) {
     };
 
     await Promise.all([
-      patchFirestoreRestDocument(`jobs/${jobId}`, updates, updateFields),
+      patchJobDocument(jobId, { status, message, clearCredentials: true }),
       setFirestoreRestDocument(`groups/${groupId}/history/${historyDocId}`, historyDocData),
     ]);
     return NextResponse.json({ jobId }, { status: 200 });

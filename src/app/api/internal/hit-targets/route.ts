@@ -1,69 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
+import {
+  buildHitTargetDescriptors,
+  decodeHitTargetsFromRawIds,
+  type HitTarget,
+  type HitTargetDescriptor,
+} from '@/lib/api/hit-targets';
 import { getFirestoreRestDocument, listFirestoreRestCollection } from '@/lib/firebase/firestore-rest';
-import { decodeGroupIdsForDisplay } from '@/lib/security/group-ids-crypto';
-
-type HitTarget = {
-  groupId: string;
-  userId: string;
-  password: string;
-};
-
-type HitTargetDescriptor = {
-  groupId: string;
-  rowIndex: number;
-};
-
-function parseCsvEntries(groupId: string, text: string): HitTarget[] {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  const entries: HitTarget[] = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    const parts = line.split(',').map((part) => part.trim());
-
-    if (parts.length < 2) {
-      continue;
-    }
-
-    const [userId, password] = parts;
-
-    if (!userId || !password) {
-      continue;
-    }
-
-    entries.push({ groupId, userId, password });
-  }
-
-  return entries;
-}
-
-function decodeTargetsFromRawIds(groupId: string, rawIds: unknown): HitTarget[] {
-  const decodedIds = decodeGroupIdsForDisplay(rawIds);
-  if (!decodedIds.trim()) {
-    return [];
-  }
-
-  const dedupe = new Set<string>();
-  const entries = parseCsvEntries(groupId, decodedIds);
-  const uniqueEntries: HitTarget[] = [];
-
-  for (const entry of entries) {
-    const dedupeKey = `${entry.userId}\u0000${entry.password}`;
-    if (dedupe.has(dedupeKey)) {
-      continue;
-    }
-    dedupe.add(dedupeKey);
-    uniqueEntries.push(entry);
-  }
-
-  return uniqueEntries;
-}
 
 async function collectAllHitTargetDescriptors(): Promise<HitTargetDescriptor[]> {
   const descriptors: HitTargetDescriptor[] = [];
@@ -71,10 +15,7 @@ async function collectAllHitTargetDescriptors(): Promise<HitTargetDescriptor[]> 
 
   for (const groupDocument of groupDocuments) {
     const groupId = groupDocument.id;
-    const entries = decodeTargetsFromRawIds(groupId, groupDocument.data.ids);
-    for (let rowIndex = 0; rowIndex < entries.length; rowIndex += 1) {
-      descriptors.push({ groupId, rowIndex });
-    }
+    descriptors.push(...buildHitTargetDescriptors(groupId, groupDocument.data.ids));
   }
 
   return descriptors;
@@ -86,8 +27,7 @@ async function collectHitTargetDescriptorsByGroupId(groupId: string): Promise<Hi
     return [];
   }
 
-  const entries = decodeTargetsFromRawIds(groupId, document.data.ids);
-  return entries.map((_, rowIndex) => ({ groupId, rowIndex }));
+  return buildHitTargetDescriptors(groupId, document.data.ids);
 }
 
 async function resolveGroupTarget(groupId: string, rowIndex: number): Promise<HitTarget | null> {
@@ -96,7 +36,7 @@ async function resolveGroupTarget(groupId: string, rowIndex: number): Promise<Hi
     return null;
   }
 
-  const entries = decodeTargetsFromRawIds(groupId, document.data.ids);
+  const entries = decodeHitTargetsFromRawIds(groupId, document.data.ids);
   return entries[rowIndex] ?? null;
 }
 

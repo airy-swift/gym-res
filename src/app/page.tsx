@@ -1,8 +1,6 @@
-import Link from "next/link";
-
+import { RepresentativeDrawer } from "@/components/navigation/representative-drawer";
 import { StartJobForm } from "@/components/start-job-form";
-import { ensureValidGroupAccess } from "@/lib/util/group-access";
-import { buildGroupPath } from "@/lib/navigation/group-paths";
+import { ensureValidGroupAccess, isCurrentUserGroupRepresentative } from "@/lib/util/group-access";
 
 const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
 const DEFAULT_ENTRY_COUNT = 15;
@@ -25,8 +23,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
   const maxEntryOption = numbers[numbers.length - 1] ?? 1;
   const defaultEntryCount = Math.max(1, Math.min(DEFAULT_ENTRY_COUNT, maxEntryOption));
-
-  const representativeHref = buildGroupPath("/representative", group.id);
+  const canShowRepresentativeDrawer = await isCurrentUserGroupRepresentative(group);
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#e9f4ff] px-6 py-10 text-stone-900 sm:px-12 lg:px-20">
@@ -35,12 +32,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Gym Reserver</p>
             <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
-              <Link
-                href={representativeHref}
-                className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-4 py-2 text-stone-700 transition hover:border-stone-900/30 hover:text-stone-900"
-              >
-                代表ページ
-              </Link>
+              {canShowRepresentativeDrawer ? (
+                <RepresentativeDrawer groupId={group.id} groupName={group.name} activePath="/" />
+              ) : null}
             </div>
           </div>
           <div className="border-l-4 border-stone-400/70 pl-6">

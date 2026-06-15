@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { WebSessionBridge } from "@/components/auth/web-session-bridge";
+import { RepresentativeDrawer } from "@/components/navigation/representative-drawer";
 import { getStorageBucketName } from "@/lib/firebase/app";
 import { addMonths, formatMonthLabel, getTodayInJst } from "@/lib/date/jst";
 import { HitResultsList, type HitResultRowItem } from "@/components/results/hit-results-list";
@@ -76,8 +77,6 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
     yearMonth: toYearMonthKey(nextMonth),
   });
 
-  const homeHref = buildGroupPath("/", group.id);
-
   const allImageGroups = await getAllApplicationImageGroups(group.id);
   const imageGroups = filterGroupsByMonth(allImageGroups, selectedMonth);
   const totalImageCount = imageGroups.reduce((sum, groupItem) => sum + groupItem.imagePaths.length, 0);
@@ -92,12 +91,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
         <header className="mb-8">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-stone-500">Gym Reserver</p>
-            <Link
-              href={homeHref}
-              className="inline-flex items-center gap-2 rounded-full border border-stone-900/10 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-wide text-stone-700 transition hover:border-stone-900/30 hover:text-stone-900"
-            >
-              トップページへ
-            </Link>
+            <RepresentativeDrawer groupId={group.id} groupName={group.name} activePath="/results" />
           </div>
           <div className="border-l-4 border-stone-400/70 pl-6">
             <h1 className="text-2xl font-semibold text-stone-900">抽選状況確認</h1>

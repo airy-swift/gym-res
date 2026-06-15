@@ -60,3 +60,8 @@ export async function getGroupAccessState(
 
   return { status: "authorized", group };
 }
+
+export async function isCurrentUserGroupRepresentative(group: GroupDocument): Promise<boolean> {
+  const uid = await resolveWebUserIdFromCookie();
+  return uid ? isGroupUserEnabled(group.white, uid) : false;
+}

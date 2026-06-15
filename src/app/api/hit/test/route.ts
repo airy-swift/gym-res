@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getGroupDocument } from "@/lib/firebase";
+import { decodeHitTargetsFromRawIds } from "@/lib/api/hit-targets";
+import { getGroupRepresentativeAccess } from "@/lib/api/group-representative-access";
 import { dispatchHitWorkflow } from "@/lib/github/dispatch";
-import { decodeGroupIdsForDisplay } from "@/lib/security/group-ids-crypto";
 
 type HitTestRequestBody = {
   groupId?: unknown;
@@ -25,17 +25,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const group = await getGroupDocument(groupId);
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    const access = await getGroupRepresentativeAccess(groupId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
 
-    const decodedIds = decodeGroupIdsForDisplay(group.ids);
-    if (!decodedIds.trim()) {
+    const hitTargets = decodeHitTargetsFromRawIds(access.group.id, access.group.ids);
+    if (hitTargets.length === 0) {
       return NextResponse.json({ error: "ids が未設定です。先に保存してください。" }, { status: 400 });
     }
 
-    await dispatchHitWorkflow(groupId);
+    await dispatchHitWorkflow(access.group.id);
     return NextResponse.json({ ok: true }, { status: 202 });
   } catch (error) {
     console.error("Failed to dispatch hit test workflow", error);

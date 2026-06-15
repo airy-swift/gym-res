@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getGroupDocument } from '@/lib/firebase';
-import { isAuthorizedRequest } from '@/lib/api/auth';
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

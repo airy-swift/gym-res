@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { randomUUID } from 'node:crypto';
 
-import { dispatchJobWorkflow } from '@/lib/github/dispatch';
-import { markJobAsFailed } from '@/lib/api/internal-jobs';
-import { patchFirestoreRestDocument, setFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
+import { isAuthorizedRequest } from '@/lib/api/auth';
+import { createDispatchedJob, patchJobDocument } from '@/lib/api/job-store';
 
 export async function POST(request: NextRequest) {
-  const jobId = randomUUID().replace(/-/g, '');
+  if (!isAuthorizedRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
 
   try {
@@ -27,30 +28,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await setFirestoreRestDocument(`jobs/${jobId}`, {
-      status: 'pending',
-      message: 'Job created',
-      createdAt: new Date(),
-      progress: '準備！(2分) + 1件あたり30秒程',
+    const jobId = await createDispatchedJob({
       userId,
       password,
       entryCount,
       groupId,
+      label,
+      message: 'Job created',
+      progress: '準備！(2分) + 1件あたり30秒程',
     });
-
-    try {
-      await dispatchJobWorkflow(jobId, label);
-    } catch (dispatchError) {
-      console.error('GitHub Actions dispatch failed', dispatchError);
-
-      try {
-        await markJobAsFailed(jobId, 'GitHub Actions dispatch failed');
-      } catch (updateError) {
-        console.error('Failed to mark job as failed after dispatch error', updateError);
-      }
-
-      throw dispatchError;
-    }
 
     return NextResponse.json({ jobId }, { status: 201 });
   } catch (error) {
@@ -60,6 +46,10 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  if (!isAuthorizedRequest(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   let body: { jobId?: string; status?: string; message?: string };
 
   try {
@@ -76,11 +66,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    await patchFirestoreRestDocument(`jobs/${jobId}`, {
-      status,
-      message,
-      updatedAt: new Date(),
-    }, ['status', 'message', 'updatedAt', 'userId', 'password']);
+    await patchJobDocument(jobId, { status, message, clearCredentials: true });
 
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {

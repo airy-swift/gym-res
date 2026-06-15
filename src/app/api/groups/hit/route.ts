@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
 
-import { getFirestoreDb } from "@/lib/firebase/app";
+import { getGroupRepresentativeAccess } from "@/lib/api/group-representative-access";
+import { patchFirestoreRestDocument } from "@/lib/firebase/firestore-rest";
 import { encryptGroupIds } from "@/lib/security/group-ids-crypto";
 
 type SaveHitIdsRequestBody = {
@@ -29,23 +29,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "ids must be a string" }, { status: 400 });
   }
 
-  const db = getFirestoreDb();
-  const groupRef = doc(db, "groups", groupId);
-
   try {
-    const snapshot = await getDoc(groupRef);
-
-    if (!snapshot.exists()) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
+    const access = await getGroupRepresentativeAccess(groupId);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
     }
   } catch (error) {
-    console.error("Failed to verify group before save", error);
-    return NextResponse.json({ error: "Failed to verify group" }, { status: 500 });
+    console.error("Failed to verify group representative before save", error);
+    return NextResponse.json({ error: "Failed to verify permissions" }, { status: 500 });
   }
 
   try {
     const encryptedIds = encryptGroupIds(body.ids);
-    await updateDoc(groupRef, { ids: encryptedIds });
+    await patchFirestoreRestDocument(`groups/${groupId}`, { ids: encryptedIds }, ["ids"]);
 
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error) {

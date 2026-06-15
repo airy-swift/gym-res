@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
-import { patchFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
+import { patchJobDocument } from '@/lib/api/job-store';
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
@@ -24,10 +24,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await patchFirestoreRestDocument(`jobs/${jobId}`, {
-      progress: progress.trim(),
-      updatedAt: new Date(),
-    }, ['progress', 'updatedAt']);
+    await patchJobDocument(jobId, { progress: progress.trim() });
     return NextResponse.json({ jobId, progress: progress.trim() }, { status: 200 });
   } catch (error) {
     console.error('Failed to update job progress', error);

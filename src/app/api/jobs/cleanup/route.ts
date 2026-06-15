@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
-import { getFirestoreRestDocument, patchFirestoreRestDocument } from '@/lib/firebase/firestore-rest';
+import { clearJobCredentials, getJobDocument } from '@/lib/api/job-store';
 
 export async function POST(request: NextRequest) {
   if (!isAuthorizedRequest(request)) {
@@ -24,13 +24,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const document = await getFirestoreRestDocument(`jobs/${jobId}`);
+    const document = await getJobDocument(jobId);
 
     if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
     }
 
-    await patchFirestoreRestDocument(`jobs/${jobId}`, { updatedAt: new Date() }, ['updatedAt', 'userId', 'password']);
+    await clearJobCredentials(jobId);
 
     return NextResponse.json({ jobId }, { status: 200 });
   } catch (error) {

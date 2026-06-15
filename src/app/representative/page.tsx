@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { WebSessionBridge } from "@/components/auth/web-session-bridge";
+import { RepresentativeDrawer } from "@/components/navigation/representative-drawer";
 import { RepresentativePageClient, type RepresentativeEntry } from "@/components/representative/page-client";
 import { getGroupAccessState } from "@/lib/util/group-access";
 import { buildGroupPath } from "@/lib/navigation/group-paths";
@@ -37,10 +38,15 @@ export default async function RepresentativePage({ searchParams }: Representativ
     : [];
 
   return (
-    <RepresentativePageClient
-      groupId={group.id}
-      groupName={group.name}
-      initialEntries={initialEntries}
-    />
+    <>
+      <div className="fixed right-6 top-6 z-40 sm:right-10">
+        <RepresentativeDrawer groupId={group.id} groupName={group.name} activePath="/representative" />
+      </div>
+      <RepresentativePageClient
+        groupId={group.id}
+        groupName={group.name}
+        initialEntries={initialEntries}
+      />
+    </>
   );
 }
