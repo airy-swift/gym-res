@@ -4,6 +4,11 @@ import { ensureValidGroupAccess, isCurrentUserGroupRepresentative } from "@/lib/
 
 const numbers = Array.from({ length: 20 }, (_, index) => index + 1);
 const DEFAULT_ENTRY_COUNT = 15;
+const FIRST_HALF_MONTH_END_DAY = 15;
+const JST_DAY_FORMATTER = new Intl.DateTimeFormat("ja-JP-u-ca-gregory", {
+  day: "numeric",
+  timeZone: "Asia/Tokyo",
+});
 
 type HomePageSearchParams = {
   gp?: string;
@@ -21,8 +26,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const pageTitle = normalizedGroupName || "サークル";
   const groupLabel = pageTitle;
   const representativeCount = Array.isArray(group.list) ? group.list.length : 0;
-  const maxEntryOption = numbers[numbers.length - 1] ?? 1;
-  const defaultEntryCount = Math.max(1, Math.min(DEFAULT_ENTRY_COUNT, maxEntryOption));
+  const defaultEntryCount = resolveDefaultEntryCount(representativeCount);
   const canShowRepresentativeDrawer = await isCurrentUserGroupRepresentative(group);
 
   return (
@@ -58,4 +62,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
     </main>
   );
+}
+
+function resolveDefaultEntryCount(representativeCount: number, now = new Date()): number {
+  if (isFirstHalfOfMonthJst(now)) {
+    return Math.max(1, representativeCount);
+  }
+
+  return DEFAULT_ENTRY_COUNT;
+}
+
+function isFirstHalfOfMonthJst(date: Date): boolean {
+  const dayOfMonth = Number(JST_DAY_FORMATTER.formatToParts(date).find((part) => part.type === "day")?.value);
+  return dayOfMonth >= 1 && dayOfMonth <= FIRST_HALF_MONTH_END_DAY;
 }
