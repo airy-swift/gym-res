@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import { captureScreenshot, logEarlyReturn } from '../util';
 import type { RepresentativeEntry } from '../types';
 import { getNextMonthYearMonth } from '../entry_utils';
+import { assertPageRequestsSettled, beginPageRequestScope, getVisibleButton, observePageRequests } from '../ui';
 
 export const REQUEST_STATUS_URL =
   'https://yoyaku.harp.lg.jp/sapporo/RequestStatuses/';
@@ -206,6 +207,7 @@ export async function ensureRequestStatusPage(
   screenshotPaths?: string[],
   options: RequestStatusPageOptions = {},
 ): Promise<RepresentativeEntry[]> {
+  observePageRequests(page);
   if (!isRequestStatusUrl(page.url())) {
     await page.goto(REQUEST_STATUS_INDEX_URL, { waitUntil: 'domcontentloaded' });
   } else {
@@ -213,9 +215,10 @@ export async function ensureRequestStatusPage(
       logEarlyReturn('Request status page did not reach domcontentloaded within 5000ms; continuing with current DOM.');
     });
   }
-  await page.getByRole('button', { name: /申込状態：/ }).click();
-  await page.getByRole('button', { name: filter.ja, exact: true }).click();
-  await new Promise(resolve => setTimeout(resolve, 3_000));
+  await applyRequestStatusFilter(page, filter);
+  if (!isRequestStatusUrl(page.url())) {
+    throw new Error('申込状況画面から移動したため、一覧を取得できませんでした。');
+  }
   const accountName = await resolveAccountName(page);
   const accountId = resolveAccountId();
 
@@ -233,22 +236,20 @@ export async function ensureRequestStatusPage(
   await page.waitForSelector('#fixedCotnentsWrapper', { state: 'hidden' });
   const lotteryLists = page.locator('div[role="list"].v-list.is-withBorder-marginL.h-radius-s');
   if ((await lotteryLists.count()) === 0) {
-    logEarlyReturn('No lottery list found on request status page.');
-    return [];
+    return emptyRequestStatusOrThrow(page);
   }
 
   const lotteryList = lotteryLists.first();
   const listItems = lotteryList.locator('div[role="listitem"].v-list-item');
+  if (await hasExplicitEmptyRequestStatus(page)) return [];
   try {
     await listItems.first().waitFor({ state: 'attached', timeout: 10_000 });
   } catch {
-    logEarlyReturn('Lottery list exists but contains no entries.');
-    return [];
+    return emptyRequestStatusOrThrow(page);
   }
   const itemsCount = await listItems.count();
   if (itemsCount === 0) {
-    console.log('No cancellation items found.');
-    return [];
+    return emptyRequestStatusOrThrow(page);
   }
 
   const results: RepresentativeEntry[] = [];
@@ -308,6 +309,24 @@ export async function ensureRequestStatusPage(
     });
   }
   return results;
+}
+
+async function applyRequestStatusFilter(page: Page, filter: RequestStatusFilter): Promise<void> {
+  await getVisibleButton(page, /申込状態[:：]/).click();
+  beginPageRequestScope(page);
+  await getVisibleButton(page, filter.ja).click();
+  await page.waitForTimeout(10_000);
+  assertPageRequestsSettled(page);
+}
+
+async function hasExplicitEmptyRequestStatus(page: Page): Promise<boolean> {
+  return page.getByText(/(?:申込|申し込み|データ|検索結果).*(?:ありません|見つかりません)|(?:^|\s)0\s*件(?:$|\s)/)
+    .filter({ visible: true }).first().isVisible();
+}
+
+async function emptyRequestStatusOrThrow(page: Page): Promise<RepresentativeEntry[]> {
+  if (await hasExplicitEmptyRequestStatus(page)) return [];
+  throw new Error('申込一覧も0件の表示も確認できませんでした。取得失敗を0件として扱いません。');
 }
 
 function isRequestStatusUrl(url: string): boolean {

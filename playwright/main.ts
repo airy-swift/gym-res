@@ -16,6 +16,7 @@ import { runFacilityAvailabilityPage } from './page/facility_availability';
 import { runFacilityAvailabilityComparisonPage } from './page/facility_availability_comparison';
 import { buildReservationPlan } from './reservation_plan';
 import { entriesConflictWithExistingRequest, formatEntryLabel } from './entry_utils';
+import { configurePageTimeouts } from './ui';
 
 // Placeholder configuration values. Replace with the real ones when wiring this up.
 export const HEADLESS = false;
@@ -70,6 +71,7 @@ export async function main(): Promise<void> {
       viewport: { width: 3000, height: 1080 },
     });
     page = await context.newPage();
+    configurePageTimeouts(page);
     logPhase('setup', 'Browser page created.');
 
     logPhase('job', 'Fetching job metadata.');
@@ -183,6 +185,9 @@ export async function main(): Promise<void> {
       if (cancelledCount > 0) {
         console.log(`Cancelled entries: ${cancelledCount}`);
       }
+    }
+    if (successEntries.length === 0 && (failedEntries.length > 0 || cancelledCount > 0)) {
+      throw new Error('応募に成功した枠がなく、失敗または未処理の枠が残っています。');
     }
   } catch (error) {
     syncResultCounts();

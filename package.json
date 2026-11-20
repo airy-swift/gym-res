@@ -10,7 +10,9 @@
     "play": "npm --prefix playwright run play",
     "hit": "npm --prefix playwright run hit",
     "play:test": "npm --prefix playwright run test --",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:security": "node --experimental-strip-types --experimental-vm-modules --test tests/job-security.test.mjs tests/job-store.test.mjs",
+    "test:regression": "node --experimental-strip-types --experimental-vm-modules --test tests/*.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/line-clamp": "^0.4.4",

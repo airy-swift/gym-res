@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   run-hit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     env:
       PLAYWRIGHT_GROUP_ID: ${{ inputs.group_id }}
@@ -52,20 +52,11 @@ jobs:
             --connect-timeout 10 --max-time 45 \
             -G "$HIT_TARGETS_ENDPOINT" \
             -H "API_TOKEN: $API_TOKEN" \
-            --data-urlencode "groupId=${{ inputs.group_id }}" \
-            --data-urlencode "rowIndex=${{ inputs.row_index }}" \
+            --data-urlencode "groupId=$PLAYWRIGHT_GROUP_ID" \
+            --data-urlencode "rowIndex=$PLAYWRIGHT_ROW_INDEX" \
             -H 'Accept: application/json')
 
-          SERVICE_USER=$(echo "$RESPONSE_JSON" | jq -r '.userId // empty')
-          SERVICE_PASS=$(echo "$RESPONSE_JSON" | jq -r '.password // empty')
-
-          test -n "$SERVICE_USER" || { echo "Missing userId from internal API"; exit 1; }
-          test -n "$SERVICE_PASS" || { echo "Missing password from internal API"; exit 1; }
-
-          echo "::add-mask::$SERVICE_USER"
-          echo "::add-mask::$SERVICE_PASS"
-          echo "SERVICE_USER=$SERVICE_USER" >> "$GITHUB_ENV"
-          echo "SERVICE_PASS=$SERVICE_PASS" >> "$GITHUB_ENV"
+          node .github/scripts/export-service-env.mjs hit <<< "$RESPONSE_JSON"
 
       - name: Install Playwright dependencies
         working-directory: playwright

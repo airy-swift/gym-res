@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
+import { parseJobInput } from '@/lib/api/job-input';
 import { createDispatchedJob, patchJobDocument } from '@/lib/api/job-store';
 
 export async function POST(request: NextRequest) {
@@ -8,32 +9,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
+  let body: unknown;
 
   try {
     body = await request.json();
-  } catch (error) {
-    console.error('Invalid JSON payload', error);
+  } catch {
+    console.error('Invalid JSON payload');
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { userId, password, entryCount, groupId, label } = body;
-
-  if (!userId || !password || entryCount === undefined || !groupId) {
-    return NextResponse.json({ error: 'Missing userId, password, entryCount, or groupId' }, { status: 400 });
-  }
-
-  if (!Number.isInteger(entryCount)) {
-    return NextResponse.json({ error: 'entryCount must be an integer' }, { status: 400 });
+  const parsed = parseJobInput(body);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
   try {
     const jobId = await createDispatchedJob({
-      userId,
-      password,
-      entryCount,
-      groupId,
-      label,
+      ...parsed.input,
       message: 'Job created',
       progress: '準備！(2分) + 1件あたり30秒程',
     });

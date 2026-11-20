@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import { dispatchJobWorkflow } from '@/lib/github/dispatch';
+import { decryptJobCredentials, encryptJobCredentials } from '@/lib/security/job-credentials-crypto';
 import {
+  FirestorePreconditionError,
   getFirestoreRestDocument,
   patchFirestoreRestDocument,
   setFirestoreRestDocument,
@@ -24,7 +26,7 @@ export type JobPatchInput = {
   clearCredentials?: boolean;
 };
 
-const CREDENTIAL_FIELD_PATHS = ['userId', 'password'];
+const CREDENTIAL_FIELD_PATHS = ['userId', 'password', 'encryptedCredentials'];
 const CLEAR_CREDENTIAL_FIELDS = ['updatedAt', ...CREDENTIAL_FIELD_PATHS];
 const TERMINAL_FAILURE_STATUS = 'failed';
 
@@ -34,14 +36,14 @@ export function createJobId(): string {
 
 export async function createDispatchedJob(input: CreateJobInput): Promise<string> {
   const jobId = createJobId();
+  const encryptedCredentials = encryptJobCredentials(jobId, { userId: input.userId, password: input.password });
 
   await setFirestoreRestDocument(`jobs/${jobId}`, {
     status: 'pending',
     message: input.message,
     createdAt: new Date(),
     progress: input.progress,
-    userId: input.userId,
-    password: input.password,
+    encryptedCredentials,
     entryCount: input.entryCount,
     groupId: input.groupId,
   });
@@ -62,6 +64,34 @@ export async function createDispatchedJob(input: CreateJobInput): Promise<string
 
 export async function getJobDocument(jobId: string) {
   return getFirestoreRestDocument(`jobs/${jobId}`);
+}
+
+// 復号した認証情報は、内部トークンで認証済みのAPIからだけ取得する。
+export async function getJobDocumentForRunner(jobId: string) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const document = await getJobDocument(jobId);
+    if (!document) return null;
+
+    const { encryptedCredentials, userId, password, ...metadata } = document.data;
+    if (typeof encryptedCredentials === 'string') {
+      return { ...document, data: { ...metadata, ...decryptJobCredentials(jobId, encryptedCredentials) } };
+    }
+    if (typeof userId === 'string' && typeof password === 'string') {
+      // 削除処理との競合時は古い認証情報を書き戻さず、最新状態を読み直す。
+      if (!document.updateTime) throw new Error('Job update time is required to migrate credentials');
+      try {
+        await patchFirestoreRestDocument(`jobs/${jobId}`, {
+          encryptedCredentials: encryptJobCredentials(jobId, { userId, password }),
+        }, CREDENTIAL_FIELD_PATHS, document.updateTime);
+      } catch (error) {
+        if (error instanceof FirestorePreconditionError) continue;
+        throw error;
+      }
+      return { ...document, data: { ...metadata, userId, password } };
+    }
+    return { ...document, data: metadata };
+  }
+  throw new Error('Job changed repeatedly while migrating credentials');
 }
 
 export async function patchJobDocument(jobId: string, input: JobPatchInput): Promise<void> {

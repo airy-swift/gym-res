@@ -26,6 +26,8 @@ export type FirestoreRestDocument = {
   updateTime?: string;
 };
 
+export class FirestorePreconditionError extends Error {}
+
 export async function getFirestoreRestDocument(documentPath: string): Promise<FirestoreRestDocument | null> {
   const response = await fetch(buildFirestoreDocumentUrl(documentPath), {
     cache: "no-store",
@@ -93,11 +95,13 @@ export async function patchFirestoreRestDocument(
   documentPath: string,
   data: Record<string, unknown>,
   fieldPaths: string[],
+  expectedUpdateTime?: string,
 ): Promise<void> {
   const url = buildFirestoreDocumentUrl(documentPath);
   for (const fieldPath of fieldPaths) {
     url.searchParams.append("updateMask.fieldPaths", fieldPath);
   }
+  if (expectedUpdateTime) url.searchParams.set('currentDocument.updateTime', expectedUpdateTime);
 
   const response = await fetch(url, {
     method: "PATCH",
@@ -111,6 +115,9 @@ export async function patchFirestoreRestDocument(
 
   if (!response.ok) {
     const errorText = await response.text();
+    if (expectedUpdateTime && ([404, 409, 412].includes(response.status) || /FAILED_PRECONDITION/.test(errorText))) {
+      throw new FirestorePreconditionError('Firestore document changed before update');
+    }
     throw new Error(`Firestore REST patch failed: ${response.status} ${errorText}`);
   }
 }

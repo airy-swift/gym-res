@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   process-job:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     env:
       API_BASE_URL: ${{ secrets.API_BASE_URL }}
       API_TOKEN: ${{ secrets.API_TOKEN }}
@@ -29,6 +29,13 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: playwright/package-lock.json
 
       - name: Set timezone to JST
         run: |
@@ -57,23 +64,7 @@ jobs:
             --data-urlencode "jobId=$JOB_ID" \
             -H 'Accept: application/json')
 
-          SERVICE_USER=$(echo "$JOB_JSON" | jq -r '.userId')
-          SERVICE_PASS=$(echo "$JOB_JSON" | jq -r '.password')
-          ENTRY_COUNT=$(echo "$JOB_JSON" | jq -r '.entryCount')
-          GROUP_ID=$(echo "$JOB_JSON" | jq -r '.groupId // empty')
-
-          echo "::add-mask::$SERVICE_USER"
-          echo "::add-mask::$SERVICE_PASS"
-
-          if [ -z "$GROUP_ID" ]; then
-            echo 'groupId is required in job data'
-            exit 1
-          fi
-
-          echo "SERVICE_USER=$SERVICE_USER" >> "$GITHUB_ENV"
-          echo "SERVICE_PASS=$SERVICE_PASS" >> "$GITHUB_ENV"
-          echo "ENTRY_COUNT=$ENTRY_COUNT" >> "$GITHUB_ENV"
-          echo "PLAYWRIGHT_GROUP_ID=$GROUP_ID" >> "$GITHUB_ENV"
+          node .github/scripts/export-service-env.mjs reservation <<< "$JOB_JSON"
 
       - name: Install Playwright dependencies
         run: |
@@ -104,12 +95,6 @@ jobs:
           else
             echo 'No play.log captured' > job-error-summary.txt
           fi
-
-          {
-            echo "JOB_ERROR_SUMMARY<<EOF"
-            cat job-error-summary.txt
-            echo 'EOF'
-          } >> "$GITHUB_ENV"
 
       - name: Commit debug screenshots
         if: always()

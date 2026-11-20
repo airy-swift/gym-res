@@ -9,6 +9,7 @@ import { runLoginPage } from './page/login_page';
 import type { RepresentativeEntry } from './types';
 import { ensureRequestStatusPage, REQUEST_STATUS_FILTERS, REQUEST_STATUS_INDEX_URL } from './page/request_status_page';
 import { launchChromium } from './browser';
+import { configurePageTimeouts } from './ui';
 
 export const HEADLESS = false;
 export const HIT_STATUS_URL = REQUEST_STATUS_INDEX_URL;
@@ -28,6 +29,7 @@ export async function main(): Promise<void> {
       // viewport: { width: 3000, height: 1080 },
     });
     page = await context.newPage();
+    configurePageTimeouts(page);
 
     await page.goto(HIT_STATUS_URL, { waitUntil: 'domcontentloaded' });
     await runLoginPage(page);

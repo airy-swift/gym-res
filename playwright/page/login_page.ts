@@ -1,5 +1,6 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { captureScreenshot, logEarlyReturn, logPhase, throwLoggedError } from '../util';
+import { ACTION_TIMEOUT_MS, getVisibleButton } from '../ui';
 
 const LOGIN_URL = 'https://yoyaku.harp.lg.jp/sapporo/Login';
 
@@ -15,13 +16,15 @@ export async function runLoginPage(page: Page): Promise<void> {
   try {
     logPhase('login', 'Waiting for login link.');
     await loginBtn.waitFor({ timeout: 5_000 });
-    logPhase('login', 'Login link found; clicking.');
-    await loginBtn.click();
   } catch (error) {
     const info = error instanceof Error ? error.message : String(error);
-    logPhase('login', `Login button not found; continuing without login. ${info}`);
+    logPhase('login', `Login link not found; checking authenticated state. ${info}`);
+    await assertLoggedIn(page);
     return;
   }
+
+  logPhase('login', 'Login link found; clicking.');
+  await loginBtn.click({ timeout: ACTION_TIMEOUT_MS });
 
   logPhase('login', 'Waiting for login page navigation.');
   await page.waitForURL(current => current.toString().startsWith(LOGIN_URL), {
@@ -30,6 +33,20 @@ export async function runLoginPage(page: Page): Promise<void> {
   logPhase('login', `Login page loaded: ${page.url()}`);
 
   await submitLoginForm(page);
+}
+
+export function getLoggedInIndicator(page: Page): Locator {
+  return page.locator('a[href*="/Logout"], form[action*="/Logout"]')
+    .or(page.getByText('ログアウト', { exact: true }))
+    .or(page.locator('div.SideNav_pocket').filter({ hasText: 'ログイン中' }))
+    .first();
+}
+
+async function assertLoggedIn(page: Page): Promise<void> {
+  await getLoggedInIndicator(page).waitFor({ state: 'attached', timeout: ACTION_TIMEOUT_MS });
+  if (isLoginPage(page.url())) {
+    throwLoggedError('[login] Login page is still displayed.');
+  }
 }
 
 async function submitLoginForm(page: Page): Promise<void> {
@@ -46,11 +63,12 @@ async function submitLoginForm(page: Page): Promise<void> {
     logPhase('login', 'Submitting login form.');
     await Promise.all([
       waitForUrlToLeaveLoginPage(page),
-      page.getByRole('button', { name: 'ログイン', exact: true }).click(),
+      getVisibleButton(page, 'ログイン').click({ timeout: ACTION_TIMEOUT_MS }),
     ]);
     await page.waitForLoadState('domcontentloaded', { timeout: 5_000 }).catch(() => {
       logPhase('login', 'Login destination did not reach domcontentloaded within 5000ms; continuing after URL change.');
     });
+    await assertLoggedIn(page);
     logPhase('login', `Login completed; current URL: ${page.url()}`);
   } catch (error) {
     let screenshotPath = '';
@@ -72,13 +90,5 @@ function isLoginPage(url: string): boolean {
 }
 
 async function waitForUrlToLeaveLoginPage(page: Page): Promise<void> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    if (!isLoginPage(page.url())) {
-      return;
-    }
-    await page.waitForTimeout(250);
-  }
-
-  throw new Error(`Timed out waiting for login redirect. currentUrl=${page.url()}`);
+  await page.waitForURL(url => !isLoginPage(url.toString()), { timeout: 15_000, waitUntil: 'commit' });
 }

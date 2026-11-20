@@ -1,54 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { isAuthorizedRequest } from '@/lib/api/auth';
+import { parseJobInput } from '@/lib/api/job-input';
 import {
   createDispatchedJob,
   formatHistoryTimestamp,
-  getJobDocument,
+  getJobDocumentForRunner,
   patchJobDocument,
 } from '@/lib/api/job-store';
 import {
+  getFirestoreRestDocument,
   setFirestoreRestDocument,
 } from '@/lib/firebase/firestore-rest';
 
 export async function POST(request: NextRequest) {
-  let body: { userId?: string; password?: string; entryCount?: number; groupId?: string; label?: string };
+  let body: unknown;
 
   try {
     body = await request.json();
-  } catch (error) {
-    console.error('Invalid JSON payload', error);
+  } catch {
+    console.error('Invalid JSON payload');
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { userId, password, entryCount, groupId, label } = body;
-
-  if (!userId || !password || entryCount === undefined || !groupId) {
-    return NextResponse.json({ error: 'Missing userId, password, entryCount, or groupId' }, { status: 400 });
+  const parsed = parseJobInput(body);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
 
-  if (!Number.isInteger(entryCount)) {
-    return NextResponse.json({ error: 'entryCount must be an integer' }, { status: 400 });
+  try {
+    // 通常応募は画面と同じく、有効なグループURLを持つ利用者に許可する。
+    if (!await getFirestoreRestDocument(`groups/${parsed.input.groupId}`)) {
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 });
+    }
+  } catch {
+    console.error('Failed to verify group before creating job');
+    return NextResponse.json({ error: 'グループ情報を取得できませんでした。時間をおいて再試行してください。' }, { status: 503 });
   }
-
-  // try {
-  //   const whitelistDoc = await getDoc(doc(db, 'whitelist', userId));
-
-  //   if (!whitelistDoc.exists()) {
-  //     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  //   }
-  // } catch (error) {
-  //   console.error('Failed to verify whitelist membership', error);
-  //   return NextResponse.json({ error: 'Failed to verify permissions' }, { status: 500 });
-  // }
 
   try {
     const jobId = await createDispatchedJob({
-      userId,
-      password,
-      entryCount,
-      groupId,
-      label,
+      ...parsed.input,
       message: 'ボブと太郎が今、一生懸命頑張っています。',
       progress: '準備してます',
     });
@@ -72,7 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const document = await getJobDocument(jobId);
+    const document = await getJobDocumentForRunner(jobId);
 
     if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
@@ -113,7 +105,7 @@ export async function PATCH(request: NextRequest) {
   let jobUserId: string | undefined;
 
   try {
-    const document = await getJobDocument(jobId);
+    const document = await getJobDocumentForRunner(jobId);
 
     if (!document) {
       return NextResponse.json({ error: 'Job not found' }, { status: 404 });
